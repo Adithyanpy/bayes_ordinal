@@ -1,0 +1,25 @@
+[project]
+name = "bayes-ordinal"
+version = "0.1.0"
+description = "A PyMC-based package for Bayesian ordinal regression"
+requires-python = ">=3.11"
+authors = [
+  { name = "Your Name", email = "you@example.com" },
+]
+dependencies = [
+  "numpy>=1.24,<1.25",
+  "scipy>=1.10,<1.12",
+  "pymc>=5.3,<6.0",
+  "arviz>=0.16,<0.20",
+  "xarray>=2023.11,<2024",
+  "matplotlib>=3.6,<4.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "ipykernel>=6.30",
+  "jupyterlab>=4.1",
+  "pytest>=7.4",
+  "black>=23.9",
+  "pre-commit>=3.4",
+]
