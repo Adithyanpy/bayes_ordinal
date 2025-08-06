@@ -36,7 +36,9 @@ def cumulative_model(
     link: str = "logit",
     priors: Optional[Dict[str, Any]] = None,
     model_name: str = "cumulative_model",
-    feature_names: Optional[list] = None
+    feature_names: Optional[list] = None,
+    group_idx: Optional[np.ndarray] = None,
+    n_groups: Optional[int] = None
 ) -> pm.Model:
     """
     Build cumulative ordinal regression model following PyMC Ordered Categories documentation.
@@ -52,6 +54,7 @@ def cumulative_model(
     - Uses univariate_ordered transform with initval for cutpoints (exact OC documentation)
     - Follows exact parameterization from PyMC Ordered Categories documentation
     - Uses pm.OrderedLogistic() and pm.OrderedProbit() as in OC documentation
+    - Supports hierarchical intercepts with non-centered parameterization
     
     Parameters
     ----------
@@ -70,11 +73,15 @@ def cumulative_model(
     feature_names : list, optional
         Names of features for better variable naming. If None and X is DataFrame,
         column names will be used.
+    group_idx : np.ndarray, optional
+        Group index for hierarchical intercepts (integer codes).
+    n_groups : int, optional
+        Number of groups (used with group_idx).
         
     Returns
     -------
     pm.Model
-        PyMC model following OC documentation structure
+        PyMC model following OC documentation structure with optional hierarchical intercepts
         
     References
     ----------
@@ -116,7 +123,8 @@ def cumulative_model(
             "coef_mu": 0.0,
             "coef_sigma": 0.5,  # Following PyMC documentation
             "cut_mu": 0.0,
-            "cut_sigma": 1.0
+            "cut_sigma": 1.0,
+            "u_sigma": 1.0  # Group-level variation (hierarchical)
         }
     
     with pm.Model(coords=coords, name=model_name) as model:
@@ -142,15 +150,28 @@ def cumulative_model(
             "alpha",
             mu=0,
             sigma=1,
-            transform=pm.distributions.transforms.univariate_ordered,
+            transform=pm.distributions.transforms.ordered,
             shape=N_RESPONSE_CLASSES - 1,
             initval=np.arange(N_RESPONSE_CLASSES - 1) - 2.5,  # use ordering (with coarse log-odds centering) for init
             dims="CUTPOINTS",
         )
         
+        # Optional non-centered varying intercepts (hierarchical)
+        if group_idx is not None and n_groups is not None:
+            u_sigma = pm.HalfNormal("u_sigma", sigma=priors["u_sigma"])
+            u_offset = pm.Normal("u_offset", mu=0.0, sigma=1.0, shape=n_groups)
+            u = pm.Deterministic("u", u_offset * u_sigma)
+            u_g = u[group_idx]
+        else:
+            u_g = 0
+        
         # Linear predictor (following OC documentation)
         phi = sum(beta_vars[f"beta_{name.lower().replace(' ', '_')}"] * data_vars[name.lower().replace(" ", "_")] 
                 for name in feature_names)
+        
+        # Add hierarchical intercept if specified
+        if group_idx is not None and n_groups is not None:
+            phi = phi + u_g
         
         # Likelihood (following OC documentation exactly)
         if link.lower() == "logit":
