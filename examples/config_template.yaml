@@ -1,0 +1,67 @@
+name: "my_ordinal_analysis"
+description: "Template configuration for Bayesian ordinal regression"
+version: "0.1.0"
+
+model:
+  model_type: "cumulative"  # "cumulative" or "partial_odds"
+  link: "logit"  # "logit", "probit", "cloglog"
+  hierarchical: false
+  group_variable: null
+  n_categories: null
+  n_features: null
+
+priors:
+  prior_type: "default"  # "default", "weakly_informative", "informative", "custom"
+  coef_mu: 0.0
+  coef_sigma: 2.5
+  cut_mu: 0.0
+  cut_sigma: 5.0
+  u_sigma: 1.0
+  gamma_mu: 0.0
+  gamma_sigma: 5.0
+  custom_priors: {}
+
+sampling:
+  draws: 1000
+  tune: 1000
+  chains: 4
+  init: "jitter+adapt_diag"
+  jitter_max_retries: 5
+  smoke_test: false
+  progressbar: true
+  random_seed: null
+
+workflow:
+  run_prior_predictive: true
+  run_posterior_predictive: true
+  run_diagnostics: true
+  run_cross_validation: true
+  run_sensitivity_analysis: false
+  prior_draws: 200
+  ppc_kind: "proportions"  # "proportions", "hist", "ecdf"
+  cv_metric: "loo"  # "loo", "waic"
+  cv_threshold: 0.7
+  hdi_prob: 0.94
+  rhat_threshold: 1.1
+  ess_threshold: 400
+  sensitivity_hyperparameters: ["coef_sigma", "cut_sigma"]
+  sensitivity_values: {}
+
+data:
+  validate_data: true
+  check_missing: true
+  check_categories: true
+  standardize_features: true
+  encode_categorical: true
+  categorical_columns: null
+  group_columns: null
+
+output:
+  output_dir: null
+  save_results: true
+  save_format: "json"  # "json", "yaml", "pickle"
+  save_plots: true
+  plot_format: "png"  # "png", "pdf", "svg"
+  dpi: 300
+  verbose: true
+  show_plots: true 
