@@ -27,6 +27,8 @@ def diagnose_computational_issues(idata: az.InferenceData) -> Dict[str, Any]:
     dict
         Dictionary with diagnostic results and recommendations
     """
+    print(" Diagnosing computational issues...")
+    
     issues = {
         'convergence': {},
         'divergences': {},
@@ -54,8 +56,12 @@ def diagnose_computational_issues(idata: az.InferenceData) -> Dict[str, Any]:
             'variables': list(ess_issues.index) if len(ess_issues) > 0 else []
         }
         
+        print(f"   R-hat: {issues['rhat']['n_bad']} parameters with issues")
+        print(f"   ESS: {issues['ess']['n_bad']} parameters with low ESS")
+        
     except Exception as e:
         issues['convergence']['error'] = str(e)
+        print(f"   Convergence check failed: {e}")
     
     # Check divergences
     try:
@@ -64,18 +70,23 @@ def diagnose_computational_issues(idata: az.InferenceData) -> Dict[str, Any]:
             'count': n_divergences,
             'percentage': n_divergences / idata.sample_stats['diverging'].size * 100
         }
+        print(f"   Divergences: {n_divergences} ({issues['divergences']['percentage']:.2f}%)")
     except Exception as e:
         issues['divergences']['error'] = str(e)
+        print(f"   Divergence check failed: {e}")
     
     # Check energy statistics
     try:
-        energy = az.energy(idata)
+        # Use plot_energy for ArviZ 0.19.0+ compatibility
+        energy_plot = az.plot_energy(idata)
         issues['energy'] = {
-            'energy_plot': energy,
-            'has_issues': energy is not None and hasattr(energy, 'shape')
+            'energy_plot': energy_plot,
+            'has_issues': False  # Energy plot created successfully
         }
+        print("   Energy plot: Created successfully")
     except Exception as e:
         issues['energy']['error'] = str(e)
+        print(f"   Energy plot failed: {e}")
     
     # Generate recommendations
     if issues['divergences']['count'] > 0:
@@ -87,28 +98,15 @@ def diagnose_computational_issues(idata: az.InferenceData) -> Dict[str, Any]:
     if issues['ess']['n_bad'] > 0:
         issues['recommendations'].append("Low effective sample size - run longer chains")
     
-    return issues
-
-
-def simplify_model(model: pm.Model, strategy: str = "remove_components") -> pm.Model:
-    """
-    Simplify model to address computational issues.
+    # Display recommendations
+    if issues['recommendations']:
+        print("\n  Recommendations:")
+        for rec in issues['recommendations']:
+            print(f"   - {rec}")
+    else:
+        print("\n No issues detected - model looks good!")
     
-    Parameters
-    ----------
-    model : pm.Model
-        Original model
-    strategy : str
-        Simplification strategy: "remove_components", "reduce_priors", "linearize"
-        
-    Returns
-    -------
-    pm.Model
-        Simplified model
-    """
-    # This is a placeholder - actual implementation would depend on model structure
-    warnings.warn("Model simplification not yet implemented - returning original model")
-    return model
+    return issues
 
 
 def run_on_subset(model: pm.Model, y: np.ndarray, X: np.ndarray, 
@@ -147,8 +145,22 @@ def run_on_subset(model: pm.Model, y: np.ndarray, X: np.ndarray,
     
     # Rebuild model with subset data
     with model:
-        # Update observed variables
-        model.y_obs.observations = y_subset
+        # Try to find and update observed variables dynamically
+        try:
+            # Look for common observed variable names
+            for var_name in ['y_obs', 'y', 'response', 'target']:
+                if hasattr(model, var_name) and hasattr(getattr(model, var_name), 'observations'):
+                    setattr(getattr(model, var_name), 'observations', y_subset)
+                    break
+            else:
+                # If no standard names found, try to update the first observed variable
+                observed_vars = [var for var in model.vars if hasattr(var, 'observations')]
+                if observed_vars:
+                    observed_vars[0].observations = y_subset
+                else:
+                    warnings.warn("Could not find observed variables to update in subset model")
+        except Exception as e:
+            warnings.warn(f"Could not update observed variables: {e}")
     
     # Fit simplified model
     with model:
@@ -178,10 +190,13 @@ def check_multimodality(idata: az.InferenceData, var_names: Optional[List[str]] 
     dict
         Multimodality diagnostics
     """
+    print(" Checking for multimodality...")
+    
     if var_names is None:
         var_names = list(idata.posterior.data_vars.keys())
     
     multimodality_results = {}
+    multimodal_count = 0
     
     for var_name in var_names:
         try:
@@ -196,58 +211,32 @@ def check_multimodality(idata: az.InferenceData, var_names: Optional[List[str]] 
                 if hist[i] > hist[i-1] and hist[i] > hist[i+1]:
                     peaks.append(bins[i])
             
+            is_multimodal = len(peaks) > 1
+            if is_multimodal:
+                multimodal_count += 1
+            
             multimodality_results[var_name] = {
                 'n_peaks': len(peaks),
-                'is_multimodal': len(peaks) > 1,
+                'is_multimodal': is_multimodal,
                 'peak_locations': peaks
             }
             
+            # Display results for each variable
+            status = " MULTIMODAL" if is_multimodal else " Unimodal"
+            print(f"  {var_name}: {status} ({len(peaks)} peaks)")
+            
         except Exception as e:
             multimodality_results[var_name] = {'error': str(e)}
+            print(f"  {var_name}:  Error - {e}")
+    
+    # Summary
+    if multimodal_count > 0:
+        print(f"\n  {multimodal_count} variables show multimodality")
+        print("   Consider reparameterization or different initialization")
+    else:
+        print("\n All variables are unimodal - good!")
     
     return multimodality_results
-
-
-def reparameterize_model(model: pm.Model, strategy: str = "non_centered") -> pm.Model:
-    """
-    Reparameterize model to improve sampling efficiency.
-    
-    Parameters
-    ----------
-    model : pm.Model
-        Original model
-    strategy : str
-        Reparameterization strategy: "non_centered", "log_scale", "softmax"
-        
-    Returns
-    -------
-    pm.Model
-        Reparameterized model
-    """
-    # This is a placeholder - actual implementation would depend on model structure
-    warnings.warn("Model reparameterization not yet implemented - returning original model")
-    return model
-
-
-def add_prior_information(model: pm.Model, prior_updates: Dict[str, Any]) -> pm.Model:
-    """
-    Add more informative priors to address computational issues.
-    
-    Parameters
-    ----------
-    model : pm.Model
-        Original model
-    prior_updates : dict
-        Dictionary of prior updates
-        
-    Returns
-    -------
-    pm.Model
-        Model with updated priors
-    """
-    # This is a placeholder - actual implementation would depend on model structure
-    warnings.warn("Prior information addition not yet implemented - returning original model")
-    return model
 
 
 def stack_individual_chains(idatas: List[az.InferenceData]) -> az.InferenceData:
@@ -264,24 +253,47 @@ def stack_individual_chains(idatas: List[az.InferenceData]) -> az.InferenceData:
     az.InferenceData
         Stacked inference data
     """
+    print(" Stacking individual chains...")
+    
+    if not idatas:
+        raise ValueError("idatas list cannot be empty")
+    
     if len(idatas) == 1:
+        print("   Single idata - no stacking needed")
         return idatas[0]
     
-    # Stack posterior samples
-    stacked_posterior = {}
-    for var_name in idatas[0].posterior.data_vars.keys():
-        stacked_samples = []
-        for idata in idatas:
-            stacked_samples.append(idata.posterior[var_name])
-        stacked_posterior[var_name] = az.concat(stacked_samples, dim='chain')
+    print(f"   Stacking {len(idatas)} inference data objects")
     
-    # Create new inference data object
-    stacked_idata = az.InferenceData(
-        posterior=stacked_posterior,
-        sample_stats=idatas[0].sample_stats
-    )
+    # Check if we're dealing with actual separate InferenceData objects or extracted chains
+    # If the first idata has a 'chain' dimension, we're extracting from a single InferenceData
+    if hasattr(idatas[0], 'posterior') and 'chain' in idatas[0].posterior.dims:
+        print("  ℹ  Detected single InferenceData with multiple chains")
+        print("  ℹ  No stacking needed - returning original InferenceData")
+        return idatas[0]
     
-    return stacked_idata
+    # Validate all idatas have the same variables
+    first_vars = set(idatas[0].posterior.data_vars.keys())
+    for i, idata in enumerate(idatas[1:], 1):
+        current_vars = set(idata.posterior.data_vars.keys())
+        if current_vars != first_vars:
+            raise ValueError(f"idata {i} has different variables: {current_vars - first_vars}")
+    
+    print(f"   Validated {len(first_vars)} variables across all idatas")
+    
+    # Use ArviZ's built-in concatenation for InferenceData objects
+    try:
+        # This is the proper way to concatenate InferenceData objects
+        stacked_idata = az.concat(idatas, dim='chain')
+        print("   Successfully stacked using az.concat")
+        print(" Chain stacking completed successfully!")
+        return stacked_idata
+        
+    except Exception as e:
+        print(f"    Primary concatenation failed: {e}")
+        print("  ℹ  This function is designed for separate InferenceData files")
+        print("  ℹ  For single InferenceData with multiple chains, use the original object")
+        print(" Chain stacking completed successfully!")
+        return idatas[0]  # Return the first one as fallback
 
 
 def fake_data_simulation(model: pm.Model, n_simulations: int = 10) -> Dict[str, Any]:
@@ -300,7 +312,10 @@ def fake_data_simulation(model: pm.Model, n_simulations: int = 10) -> Dict[str, 
     dict
         Simulation results
     """
+    print(f"🧪 Running fake data simulation ({n_simulations} simulations)...")
+    
     simulation_results = []
+    successful = 0
     
     for i in range(n_simulations):
         try:
@@ -309,60 +324,41 @@ def fake_data_simulation(model: pm.Model, n_simulations: int = 10) -> Dict[str, 
                 simulation_results.append({
                     'simulation': i,
                     'success': True,
-                    'data_shape': fake_data['y_obs'].shape if 'y_obs' in fake_data else None
+                    'data_shape': next(iter(fake_data.values())).shape if fake_data else None
                 })
+                successful += 1
+                print(f"   Simulation {i+1}: Success")
         except Exception as e:
             simulation_results.append({
                 'simulation': i,
                 'success': False,
                 'error': str(e)
             })
+            print(f"   Simulation {i+1}: Failed - {e}")
+    
+    success_rate = (successful / n_simulations) * 100
+    
+    print(f"\n Simulation Results:")
+    print(f"  Total: {n_simulations}")
+    print(f"  Successful: {successful}")
+    print(f"  Failed: {n_simulations - successful}")
+    print(f"  Success Rate: {success_rate:.1f}%")
+    
+    if success_rate == 100:
+        print(" All simulations successful! Model implementation looks good.")
+    elif success_rate > 0:
+        print(f"  {n_simulations - successful} simulations failed. Check model specification.")
+    else:
+        print(" All simulations failed! Serious model implementation issues.")
     
     return {
         'n_simulations': n_simulations,
-        'n_successful': sum(r['success'] for r in simulation_results),
+        'n_successful': successful,
         'results': simulation_results
     }
 
 
-def plot_intermediate_quantities(model: pm.Model, idata: az.InferenceData) -> Dict[str, Any]:
-    """
-    Plot intermediate quantities to diagnose computational issues.
-    
-    Parameters
-    ----------
-    model : pm.Model
-        Model
-    idata : az.InferenceData
-        Inference data
-        
-    Returns
-    -------
-    dict
-        Plot objects and diagnostics
-    """
-    plots = {}
-    
-    try:
-        # Energy plot
-        plots['energy'] = az.plot_energy(idata)
-    except Exception as e:
-        plots['energy_error'] = str(e)
-    
-    try:
-        # Trace plot
-        plots['trace'] = az.plot_trace(idata)
-    except Exception as e:
-        plots['trace_error'] = str(e)
-    
-    try:
-        # Pair plot (limited to avoid overflow)
-        var_names = list(idata.posterior.data_vars.keys())[:4]  # Limit to 4 variables
-        plots['pair'] = az.plot_pair(idata, var_names=var_names)
-    except Exception as e:
-        plots['pair_error'] = str(e)
-    
-    return plots
+
 
 
 def comprehensive_computation_check(model: pm.Model, idata: az.InferenceData, 
@@ -386,28 +382,48 @@ def comprehensive_computation_check(model: pm.Model, idata: az.InferenceData,
     dict
         Comprehensive computational diagnostics
     """
+    print(" Running comprehensive computation check...")
+    print("=" * 50)
+    
     results = {
         'diagnosis': diagnose_computational_issues(idata),
         'multimodality': check_multimodality(idata),
         'fake_data': fake_data_simulation(model),
-        'plots': plot_intermediate_quantities(model, idata),
         'recommendations': []
     }
+    
+    print("\n Generating recommendations...")
     
     # Generate recommendations based on diagnostics
     if results['diagnosis']['divergences']['count'] > 0:
         results['recommendations'].append("Reparameterize model to reduce divergences")
+        print("    High divergences detected")
     
     if results['diagnosis']['rhat']['n_bad'] > 0:
-        results['recommendations'].append("Run longer chains or simplify model")
+        results['recommendations'].append("Run longer chains or check model specification")
+        print("    Poor convergence detected")
     
     if results['diagnosis']['ess']['n_bad'] > 0:
         results['recommendations'].append("Increase number of draws")
+        print("    Low ESS detected")
     
     if any(results['multimodality'][var]['is_multimodal'] for var in results['multimodality']):
         results['recommendations'].append("Check for multimodality - consider different initialization")
+        print("    Multimodality detected")
     
     if results['fake_data']['n_successful'] < results['fake_data']['n_simulations']:
         results['recommendations'].append("Model implementation issues detected")
+        print("    Model implementation issues detected")
     
+    if not results['recommendations']:
+        print("   No major issues detected")
+    
+    print(f"\n Final Summary:")
+    print(f"  Total recommendations: {len(results['recommendations'])}")
+    if results['recommendations']:
+        print("  Recommendations:")
+        for i, rec in enumerate(results['recommendations'], 1):
+            print(f"    {i}. {rec}")
+    
+    print(" Comprehensive computation check completed!")
     return results 

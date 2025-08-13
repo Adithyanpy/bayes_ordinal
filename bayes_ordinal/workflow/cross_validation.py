@@ -1,12 +1,154 @@
-# bayes_ordinal/workflow/cross_validation.py
+# bayes_ordinal/workflow/cross_validation_refactored.py
+# Refactored version eliminating redundancy
 
 import arviz as az
 import matplotlib.pyplot as plt
 import pandas as pd
 import pymc as pm
-from typing import Sequence, Mapping, Dict, Any
+from typing import Sequence, Mapping, Dict, Any, Tuple
 import numpy as np
-from typing import Tuple
+
+# ============================================================================
+# HELPER FUNCTIONS (Extracted common functionality)
+# ============================================================================
+
+def _check_log_likelihood(idata: az.InferenceData, name: str) -> bool:
+    """Check if log likelihood is available in InferenceData."""
+    has_ll = ("log_likelihood" in idata or 
+               "log_likelihood" in idata.posterior_predictive or
+               "log_likelihood" in idata.sample_stats)
+    
+    if has_ll:
+        print(f" Log likelihood found for {name}")
+        if "log_likelihood" in idata.sample_stats:
+            print(f"  Location: sample_stats (from log_likelihood=True in pm.sample())")
+        elif "log_likelihood" in idata.posterior_predictive:
+            print(f"  Location: posterior_predictive")
+        elif "log_likelihood" in idata:
+            print(f"  Location: root level")
+    else:
+        print(f" Log likelihood not found for {name} - LOO/WAIC will fail")
+        if hasattr(idata, 'posterior') and 'log_likelihood' in idata.posterior:
+            print(f"  Found log_likelihood in posterior for {name}")
+        elif hasattr(idata, 'sample_stats') and 'log_likelihood' in idata.sample_stats:
+            print(f"  Found log_likelihood in sample_stats for {name}")
+        else:
+            print(f"  No log_likelihood found anywhere for {name}")
+            print(f"  Available variables in posterior: {list(idata.posterior.data_vars.keys())}")
+            print(f"  Available variables in sample_stats: {list(idata.sample_stats.data_vars.keys())}")
+    
+    return has_ll
+
+def _extract_arviz_values(obj, use_max: bool = True) -> np.ndarray:
+    """Extract values from ArviZ objects, handling different versions."""
+    if hasattr(obj, 'values') and callable(obj.values):
+        values = list(obj.values())
+    else:
+        values = obj
+    
+    # Convert to numpy array, handling array vs scalar values
+    if use_max:
+        return np.array([float(np.max(v)) if hasattr(v, '__len__') else float(v) for v in values])
+    else:
+        return np.array([float(np.min(v)) if hasattr(v, '__len__') else float(v) for v in values])
+
+def _compute_influence_diagnostics(idata: az.InferenceData, ic: str, reffuge_thresh: float) -> Dict[str, Any]:
+    """Compute influence diagnostics for a single model."""
+    if ic != "loo":
+        return {'not_applicable': 'WAIC does not have influence diagnostics'}
+    
+    try:
+        loo = az.loo(idata, pointwise=True)
+        pareto_k_array = _extract_arviz_values(loo.pareto_k, use_max=True)
+        
+        return {
+            'n_influential': int(np.sum(pareto_k_array > reffuge_thresh)),
+            'max_k': float(np.max(pareto_k_array)),
+            'mean_k': float(np.mean(pareto_k_array)),
+            'k_above_1': int(np.sum(pareto_k_array > 1.0)),
+            'k_above_0.7': int(np.sum(pareto_k_array > 0.7))
+        }
+    except Exception as e:
+        print(f"Could not compute influence diagnostics: {e}")
+        return {'n_influential': 0, 'max_k': float('nan'), 'mean_k': float('nan'), 
+                'k_above_1': 0, 'k_above_0.7': 0}
+
+def _compute_convergence_diagnostics(idata: az.InferenceData) -> Dict[str, Any]:
+    """Compute convergence diagnostics for a single model."""
+    # R-hat diagnostics
+    try:
+        rhat = az.rhat(idata)
+        rhat_array = _extract_arviz_values(rhat, use_max=True)
+        max_rhat = float(np.max(rhat_array))
+        n_high_rhat = int(np.sum(rhat_array > 1.1))
+    except Exception as e:
+        print(f"Could not compute R-hat: {e}")
+        max_rhat = 1.0
+        n_high_rhat = 0
+    
+    # ESS diagnostics
+    try:
+        ess = az.ess(idata)
+        ess_array = _extract_arviz_values(ess, use_max=False)
+        min_ess = float(np.min(ess_array))
+        n_low_ess = int(np.sum(ess_array < 400))
+    except Exception as e:
+        print(f"Could not compute ESS: {e}")
+        min_ess = 1000.0
+        n_low_ess = 0
+    
+    return {
+        'max_rhat': max_rhat,
+        'n_high_rhat': n_high_rhat,
+        'min_ess': min_ess,
+        'n_low_ess': n_low_ess,
+        'converged': max_rhat < 1.1 and min_ess > 400
+    }
+
+def _assess_model_complexity(model: pm.Model) -> Dict[str, Any]:
+    """Assess complexity of a single model."""
+    n_params = len(model.free_RVs)
+    n_deterministics = len(model.deterministics)
+    
+    return {
+        'n_parameters': n_params,
+        'n_deterministics': n_deterministics,
+        'total_variables': n_params + n_deterministics,
+        'complexity_level': 'Simple' if n_params < 10 else 'Moderate' if n_params < 20 else 'Complex'
+    }
+
+def _determine_best_model(comparison_df: pd.DataFrame, ic: str) -> str:
+    """Determine the best model based on information criterion."""
+    if ic in ["loo", "waic"]:
+        best_idx = np.argmin(comparison_df[f'elpd_{ic}'])  # Lower is better for LOO/WAIC
+    else:
+        best_idx = np.argmax(comparison_df[f'elpd_{ic}'])  # Higher is better for other metrics
+    return comparison_df.index[best_idx]
+
+def _compute_ic_metrics(idata: az.InferenceData, ic: str, reffuge_thresh: float) -> Dict[str, Any]:
+    """Compute information criterion metrics for a single model."""
+    try:
+        if ic == "loo":
+            loo = az.loo(idata, pointwise=True)
+            ic_val = loo.elpd_loo
+            ic_se = loo.se
+            bad_k = (loo.pareto_k > reffuge_thresh).sum().item()
+            print(f" LOO computed successfully: {ic_val:.2f} ± {ic_se:.2f}")
+        else:
+            waic = az.waic(idata, pointwise=True)
+            ic_val = waic.elpd_waic
+            ic_se = waic.se
+            bad_k = float("nan")
+            print(f" WAIC computed successfully: {ic_val:.2f} ± {ic_se:.2f}")
+        
+        return {"ic": ic_val, "ic_se": ic_se, "n_bad_k": bad_k}
+    except Exception as e:
+        print(f"Error computing {ic.upper()}: {e}")
+        return {"ic": float('nan'), "ic_se": float('nan'), "n_bad_k": float('nan')}
+
+# ============================================================================
+# MAIN FUNCTIONS (Refactored to use helpers)
+# ============================================================================
 
 def compare_models(
     models: Mapping[str, pm.Model],
@@ -14,90 +156,43 @@ def compare_models(
     ic: str = "loo",
     reffuge_thresh: float = 0.7
 ) -> pd.DataFrame:
-    """
-    Compute and compare model fit using LOO or WAIC with robust error handling.
-
-    Parameters
-    ----------
-    models : dict of str → pm.Model
-        Dictionary of model names to PyMC model objects.
-    idatas : dict of str → az.InferenceData
-        Corresponding fitted inference data for each model.
-    ic : {"loo", "waic"}, default="loo"
-        Which information criterion to compute.
-    reffuge_thresh : float, default=0.7
-        Threshold above which Pareto-k diagnostics are flagged.
-
-    Returns
-    -------
-    comparison_df : pd.DataFrame
-        DataFrame containing model comparison results.
-    """
+    """Compute and compare model fit using LOO or WAIC with robust error handling."""
     results = {}
+    log_likelihood_issues = []
+    
     for name, idata in idatas.items():
-        try:
-            if ic == "loo":
-                try:
-                    loo = az.loo(idata, pointwise=True)
-                    ic_val = loo.elpd_loo
-                    ic_se = loo.se
-                    bad_k = (loo.pareto_k > reffuge_thresh).sum().item()
-                except Exception as e:
-                    print(f"Error computing LOO for {name}: {e}")
-                    ic_val = float('nan')
-                    ic_se = float('nan')
-                    bad_k = float('nan')
-            else:
-                try:
-                    waic = az.waic(idata, pointwise=True)
-                    ic_val = waic.elpd_waic
-                    ic_se = waic.se
-                    bad_k = float("nan")
-                except Exception as e:
-                    print(f"Error computing WAIC for {name}: {e}")
-                    ic_val = float('nan')
-                    ic_se = float('nan')
-                    bad_k = float('nan')
-            
-            results[name] = {
-                "ic": ic_val,
-                "ic_se": ic_se,
-                "n_bad_k": bad_k
-            }
-        except Exception as e:
-            print(f"Error processing model {name}: {e}")
-            results[name] = {
-                "ic": float('nan'),
-                "ic_se": float('nan'),
-                "n_bad_k": float('nan')
-            }
+        # Check log likelihood availability
+        if not _check_log_likelihood(idata, name):
+            log_likelihood_issues.append(name)
+            results[name] = {"ic": float('nan'), "ic_se": float('nan'), "n_bad_k": float('nan')}
+            continue
+        
+        # Compute IC metrics
+        results[name] = _compute_ic_metrics(idata, ic, reffuge_thresh)
 
-    # Use advanced stacking comparison - only if we have sufficient data
+    # Provide guidance for log likelihood issues
+    if log_likelihood_issues:
+        print(f"\n Log likelihood issues detected for models: {log_likelihood_issues}")
+        print("To fix this, ensure your models include:")
+        print("  pm.Deterministic('log_likelihood', y_obs.log_prob(y_data))")
+        print("  where y_obs is your observed variable and y_data is the data")
+
+    # Use ArviZ comparison if possible
     if len(idatas) >= 2:
         try:
-            comp = az.compare(
-                idatas,
-                ic=ic,
-                scale="deviance",
-                method="stacking"
-            )
-
-            # Merge our bad k counts into the compare table
+            comp = az.compare(idatas, ic=ic, scale="deviance", method="stacking")
             comp["n_bad_k"] = [results[name]["n_bad_k"] for name in comp.index]
+            print(" Advanced model comparison completed using ArviZ stacking")
+            return comp
         except Exception as e:
             print(f"Could not compute model comparison: {e}")
-            # Fallback to basic comparison
-            comp = pd.DataFrame(results).T
-            comp.columns = [f'elpd_{ic}', 'se', 'n_bad_k']
-            comp[f'elpd_diff'] = 0.0
-            comp['weight'] = 1.0 / len(results)
-    else:
-        # Single model case
-        comp = pd.DataFrame(results).T
-        comp.columns = [f'elpd_{ic}', 'se', 'n_bad_k']
-        comp[f'elpd_diff'] = 0.0
-        comp['weight'] = 1.0
-
+            print("Falling back to basic comparison using available metrics")
+    
+    # Fallback to basic comparison
+    comp = pd.DataFrame(results).T
+    comp.columns = [f'elpd_{ic}', 'se', 'n_bad_k']
+    comp[f'elpd_diff'] = 0.0
+    comp['weight'] = 1.0 / len(results)
     return comp
 
 def compare_models_stacking(
@@ -108,158 +203,63 @@ def compare_models_stacking(
     include_stacking: bool = True,
     include_bma: bool = True
 ) -> Dict[str, Any]:
-    """
-    Advanced model comparison with stacking, Bayesian Model Averaging, and diagnostics.
-    
-    This function provides comprehensive model comparison using PyMC's advanced features:
-    - Information criteria comparison (LOO/WAIC)
-    - Stacking weights for model averaging
-    - Bayesian Model Averaging (BMA)
-    - Influence diagnostics
-    - Convergence diagnostics
-    
-    Parameters
-    ----------
-    models : dict of str → pm.Model
-        Dictionary of model names to PyMC model objects.
-    idatas : dict of str → az.InferenceData
-        Corresponding fitted inference data for each model.
-    ic : {"loo", "waic"}, default="loo"
-        Which information criterion to compute.
-    reffuge_thresh : float, default=0.7
-        Threshold above which Pareto-k diagnostics are flagged.
-    include_stacking : bool, default=True
-        Whether to compute stacking weights for model averaging.
-    include_bma : bool, default=True
-        Whether to compute Bayesian Model Averaging.
-        
-    Returns
-    -------
-    dict
-        Advanced model comparison results with stacking and BMA.
-        
-    References
-    ----------
-    Yao, Y., Vehtari, A., Simpson, D., & Gelman, A. (2018). Using stacking to average 
-    Bayesian predictive distributions. Bayesian Analysis, 13(3), 917-1003.
-    """
+    """Advanced model comparison with stacking, BMA, and diagnostics."""
     results = {}
     
     # 1. Basic comparison
     comparison_df = compare_models(models, idatas, ic, reffuge_thresh)
     results["basic_comparison"] = comparison_df
     
-    # 2. Advanced stacking (if requested)
+    # 2. Advanced stacking
     if include_stacking and len(idatas) > 1:
-        # Use ArviZ's advanced stacking
         try:
-            stacking_result = az.compare(
-                idatas,
-                ic=ic,
-                scale="deviance",
-                method="stacking"
-            )
+            stacking_result = az.compare(idatas, ic=ic, scale="deviance", method="stacking")
             results["stacking_weights"] = stacking_result["weight"]
             results["stacking_method"] = "stacking"
-            print("✓ Stacking weights computed successfully")
+            print(" Stacking weights computed successfully")
         except Exception as e:
             print(f"Could not compute stacking weights: {e}")
             results["stacking_weights"] = None
             results["stacking_method"] = None
     
-    # 3. Bayesian Model Averaging (if requested)
+    # 3. Bayesian Model Averaging
     if include_bma and len(idatas) > 1:
-        # Compute BMA using equal prior weights
-        bma_weights = np.ones(len(idatas)) / len(idatas)
+        model_names = list(idatas.keys())
+        bma_weights = {name: 1.0 / len(idatas) for name in model_names}
         results["bma_weights"] = bma_weights
         results["bma_method"] = "equal_prior"
-        print("✓ Bayesian Model Averaging weights computed")
+        print(" Bayesian Model Averaging weights computed")
     
     # 4. Influence diagnostics
-    influence_diagnostics = {}
-    for name, idata in idatas.items():
-        if ic == "loo":
-            loo = az.loo(idata, pointwise=True)
-            influence_diagnostics[name] = {
-                'n_influential': int((loo.pareto_k > reffuge_thresh).sum().values),
-                'max_k': float(loo.pareto_k.max().values),
-                'mean_k': float(loo.pareto_k.mean().values),
-                'k_above_1': int((loo.pareto_k > 1.0).sum().values),
-                'k_above_0.7': int((loo.pareto_k > 0.7).sum().values)
-            }
-        else:
-            influence_diagnostics[name] = {'not_applicable': 'WAIC does not have influence diagnostics'}
-    
+    influence_diagnostics = {name: _compute_influence_diagnostics(idata, ic, reffuge_thresh) 
+                           for name, idata in idatas.items()}
     results["influence_diagnostics"] = influence_diagnostics
     
     # 5. Convergence diagnostics
-    convergence_diagnostics = {}
-    for name, idata in idatas.items():
-        # R-hat diagnostics
-        try:
-            rhat = az.rhat(idata)
-            max_rhat = float(rhat.max().values)
-            n_high_rhat = int((rhat > 1.1).sum().values)
-        except Exception as e:
-            print(f"Could not compute R-hat: {e}")
-            max_rhat = 1.0
-            n_high_rhat = 0
-        
-        # ESS diagnostics
-        try:
-            ess = az.ess(idata)
-            min_ess = float(ess.min().values)
-            n_low_ess = int((ess < 400).sum().values)
-        except Exception as e:
-            print(f"Could not compute ESS: {e}")
-            min_ess = 1000.0
-            n_low_ess = 0
-        
-        convergence_diagnostics[name] = {
-            'max_rhat': max_rhat,
-            'n_high_rhat': n_high_rhat,
-            'min_ess': min_ess,
-            'n_low_ess': n_low_ess,
-            'converged': max_rhat < 1.1 and min_ess > 400
-        }
-    
+    convergence_diagnostics = {name: _compute_convergence_diagnostics(idata) 
+                             for name, idata in idatas.items()}
     results["convergence_diagnostics"] = convergence_diagnostics
     
     # 6. Model complexity
-    complexity = {}
-    for name, model in models.items():
-        # Count parameters
-        n_params = len(model.free_RVs)
-        # Count deterministic variables
-        n_deterministics = len(model.deterministics)
-        complexity[name] = {
-            'n_parameters': n_params,
-            'n_deterministics': n_deterministics,
-            'total_variables': n_params + n_deterministics
-        }
-    
+    complexity = {name: _assess_model_complexity(model) 
+                 for name, model in models.items()}
     results["model_complexity"] = complexity
     
-    # 7. Recommendations
-    best_model = comparison_df.index[np.argmax(comparison_df[f'elpd_{ic}'])]
-    results["best_model"] = best_model
+    # 7. Best model and recommendations
+    results["best_model"] = _determine_best_model(comparison_df, ic)
     
     # Generate recommendations
     recommendations = []
-    
-    # Check convergence
     conv_issues = [name for name, conv in convergence_diagnostics.items() 
                    if not conv.get('converged', True)]
     if conv_issues:
         recommendations.append(f"Convergence issues detected in models: {conv_issues}")
     
-    # Check influence
     high_influence = [name for name, infl in influence_diagnostics.items() 
                      if infl.get('n_influential', 0) > 0]
     if high_influence:
         recommendations.append(f"High influence observations in models: {high_influence}")
     
-    # Model averaging recommendation
     if len(idatas) > 1:
         if results.get("stacking_weights") is not None:
             recommendations.append("Consider using stacking weights for model averaging")
@@ -267,7 +267,6 @@ def compare_models_stacking(
             recommendations.append("Bayesian Model Averaging weights available")
     
     results["recommendations"] = recommendations
-    
     return results
 
 def compare_models_interpretation(
@@ -276,55 +275,7 @@ def compare_models_interpretation(
     ic: str = "loo",
     reffuge_thresh: float = 0.7
 ) -> Dict[str, Any]:
-    """
-    Advanced model comparison with McElreath-style interpretation and robust error handling.
-    
-    Parameters
-    ----------
-    models : dict
-        Dictionary mapping model names to PyMC model objects.
-    idatas : dict
-        Dictionary mapping model names to inference data.
-    ic : str, default="loo"
-        Information criterion to use ("loo" or "waic").
-    reffuge_thresh : float, default=0.7
-        Threshold for Pareto-k diagnostics.
-        
-    Returns
-    -------
-    dict
-        Comprehensive model comparison results with interpretation.
-    """
-    """
-    McElreath-style model comparison with interpretation rules.
-    
-    This function provides a comprehensive model comparison following
-    McElreath's Statistical Rethinking principles, including:
-    - Information criteria comparison
-    - McElreath's interpretation rules
-    - Model weights and stacking
-    - Influence diagnostics
-    
-    Parameters
-    ----------
-    models : dict of str → pm.Model
-        Dictionary of model names to PyMC model objects.
-    idatas : dict of str → az.InferenceData
-        Corresponding fitted inference data for each model.
-    ic : {"loo", "waic"}, default="loo"
-        Which information criterion to compute.
-    reffuge_thresh : float, default=0.7
-        Threshold above which Pareto-k diagnostics are flagged.
-        
-    Returns
-    -------
-    dict
-        Comprehensive model comparison results with McElreath interpretation.
-        
-    References
-    ----------
-    McElreath, R. (2020). Statistical Rethinking: A Bayesian Course with Examples in R and Stan.
-    """
+    """Advanced model comparison with McElreath-style interpretation."""
     # Get basic comparison
     comparison_df = compare_models(models, idatas, ic, reffuge_thresh)
     
@@ -333,15 +284,13 @@ def compare_models_interpretation(
     ic_ses = comparison_df['se'].values
     differences = comparison_df[f'elpd_diff'].values
     weights = comparison_df['weight'].values if 'weight' in comparison_df.columns else None
-    bad_k_counts = comparison_df['n_bad_k'].values if 'n_bad_k' in comparison_df.columns else None
     
     # Find best model
-    best_idx = np.argmax(ic_values)
-    best_model = comparison_df.index[best_idx]
+    best_model = _determine_best_model(comparison_df, ic)
     
     # McElreath interpretation rules
     interpretation = {}
-    for i, (name, diff) in enumerate(zip(comparison_df.index, differences)):
+    for name, diff in zip(comparison_df.index, differences):
         if diff == 0:
             interpretation[name] = {
                 'status': 'Best model',
@@ -368,32 +317,12 @@ def compare_models_interpretation(
             }
     
     # Influence diagnostics
-    influence_diagnostics = {}
-    for name, idata in idatas.items():
-        if ic == "loo":
-            loo = az.loo(idata, pointwise=True)
-            influence_diagnostics[name] = {
-                'n_influential': (loo.pareto_k > reffuge_thresh).sum().item(),
-                'max_k': loo.pareto_k.max().item(),
-                'mean_k': loo.pareto_k.mean().item(),
-                'k_above_1': (loo.pareto_k > 1.0).sum().item()
-            }
-        else:
-            influence_diagnostics[name] = {
-                'n_influential': 0,
-                'max_k': float('nan'),
-                'mean_k': float('nan'),
-                'k_above_1': 0
-            }
+    influence_diagnostics = {name: _compute_influence_diagnostics(idata, ic, reffuge_thresh) 
+                           for name, idata in idatas.items()}
     
-    # Model complexity assessment
-    complexity = {}
-    for name, model in models.items():
-        n_params = len(model.free_RVs)
-        complexity[name] = {
-            'n_parameters': n_params,
-            'complexity_level': 'Simple' if n_params < 10 else 'Moderate' if n_params < 20 else 'Complex'
-        }
+    # Model complexity
+    complexity = {name: _assess_model_complexity(model) 
+                 for name, model in models.items()}
     
     # Compile results
     results = {
@@ -413,31 +342,76 @@ def compare_models_interpretation(
     
     return results
 
+# ============================================================================
+# UTILITY FUNCTIONS (Unchanged)
+# ============================================================================
+
+def display_comparison_results(results: Dict[str, Any]) -> None:
+    """Display comprehensive comparison results in a readable format."""
+    print("\n" + "="*80)
+    print("COMPREHENSIVE MODEL COMPARISON RESULTS")
+    print("="*80)
+    
+    # Basic comparison
+    if "basic_comparison" in results:
+        print("\n BASIC COMPARISON:")
+        print(results["basic_comparison"].round(3))
+    
+    # Best model
+    if "best_model" in results:
+        print(f"\n BEST MODEL: {results['best_model']}")
+    
+    # Stacking weights
+    if "stacking_weights" in results and results["stacking_weights"] is not None:
+        print("\n STACKING WEIGHTS:")
+        for model, weight in results["stacking_weights"].items():
+            print(f"  {model}: {weight:.3f}")
+    
+    # BMA weights
+    if "bma_weights" in results and results["bma_weights"] is not None:
+        print("\n BAYESIAN MODEL AVERAGING WEIGHTS:")
+        for model, weight in results["bma_weights"].items():
+            print(f"  {model}: {weight:.3f}")
+    
+    # Convergence diagnostics
+    if "convergence_diagnostics" in results:
+        print("\n CONVERGENCE DIAGNOSTICS:")
+        for model, conv in results["convergence_diagnostics"].items():
+            status = " CONVERGED" if conv.get('converged', False) else " NOT CONVERGED"
+            print(f"  {model}: {status}")
+            print(f"    R-hat max: {conv.get('max_rhat', 'N/A'):.3f}")
+            print(f"    ESS min: {conv.get('min_ess', 'N/A'):.0f}")
+    
+    # Influence diagnostics
+    if "influence_diagnostics" in results:
+        print("\n INFLUENCE DIAGNOSTICS:")
+        for model, infl in results["influence_diagnostics"].items():
+            print(f"  {model}:")
+            print(f"    Influential obs (k > 0.7): {infl.get('n_influential', 'N/A')}")
+            print(f"    Max k: {infl.get('max_k', 'N/A'):.3f}")
+            print(f"    Mean k: {infl.get('mean_k', 'N/A'):.3f}")
+    
+    # Model complexity
+    if "model_complexity" in results:
+        print("\n MODEL COMPLEXITY:")
+        for model, comp in results["model_complexity"].items():
+            print(f"  {model}: {comp.get('n_parameters', 'N/A')} parameters")
+    
+    # Recommendations
+    if "recommendations" in results and results["recommendations"]:
+        print("\n RECOMMENDATIONS:")
+        for rec in results["recommendations"]:
+            print(f"  • {rec}")
+    
+    print("\n" + "="*80)
+
 def _generate_mcelreath_recommendations(
     interpretation: Dict[str, Any],
     influence_diagnostics: Dict[str, Any],
     complexity: Dict[str, Any],
     best_model: str
 ) -> Dict[str, Any]:
-    """
-    Generate McElreath-style recommendations based on model comparison results.
-    
-    Parameters
-    ----------
-    interpretation : dict
-        Model interpretation results
-    influence_diagnostics : dict
-        Influence diagnostics for each model
-    complexity : dict
-        Model complexity information
-    best_model : str
-        Name of the best model
-        
-    Returns
-    -------
-    dict
-        Recommendations following McElreath's principles
-    """
+    """Generate McElreath-style recommendations based on model comparison results."""
     recommendations = {
         'primary_model': best_model,
         'model_selection': [],
@@ -457,7 +431,7 @@ def _generate_mcelreath_recommendations(
     
     # Check for influential observations
     for name, diag in influence_diagnostics.items():
-        if diag['n_influential'] > 0:
+        if diag.get('n_influential', 0) > 0:
             recommendations['cautions'].append(
                 f"Model '{name}' has {diag['n_influential']} influential observations "
                 f"(k > 0.7). Consider investigating these data points."
@@ -485,16 +459,7 @@ def plot_model_comparison_interpretation(
     comparison_results: Dict[str, Any],
     figsize: Tuple[float, float] = (15, 10)
 ) -> None:
-    """
-    Plot comprehensive McElreath-style model comparison.
-    
-    Parameters
-    ----------
-    comparison_results : dict
-        Results from mcelreath_model_comparison
-    figsize : tuple
-        Figure size
-    """
+    """Plot comprehensive McElreath-style model comparison."""
     fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=figsize)
     
     # Extract data
@@ -506,7 +471,9 @@ def plot_model_comparison_interpretation(
     
     # Plot 1: IC values with uncertainty
     y_pos = np.arange(len(model_names))
-    best_idx = np.argmax(ic_values)
+    # Use the best_model from results instead of computing it here
+    best_model_name = comparison_results['best_model']
+    best_idx = list(model_names).index(best_model_name)
     
     for i, (ic_val, ic_se) in enumerate(zip(ic_values, comparison_results['ic_ses'])):
         color = 'red' if i == best_idx else 'blue'
@@ -549,14 +516,34 @@ def plot_model_comparison_interpretation(
     
     # Plot 4: Influence diagnostics
     influence_data = comparison_results['influence_diagnostics']
-    n_influential = [influence_data[name]['n_influential'] for name in model_names]
     
-    ax4.bar(range(len(n_influential)), n_influential, color='lightcoral')
-    ax4.set_xticks(range(len(n_influential)))
-    ax4.set_xticklabels(model_names, rotation=45)
-    ax4.set_ylabel('Number of Influential Observations')
-    ax4.set_title('Influence Diagnostics (k > 0.7)')
-    ax4.grid(True, alpha=0.3)
+    # Handle different influence diagnostics structures
+    n_influential = []
+    for name in model_names:
+        if name in influence_data:
+            if isinstance(influence_data[name], dict):
+                n_influential.append(influence_data[name].get('n_influential', 0))
+            else:
+                n_influential.append(0)
+        else:
+            n_influential.append(0)
+    
+    # Only plot if we have non-zero values or if we want to show the zero values
+    if any(n > 0 for n in n_influential) or True:  # Always show for clarity
+        ax4.bar(range(len(n_influential)), n_influential, color='lightcoral')
+        ax4.set_xticks(range(len(n_influential)))
+        ax4.set_xticklabels(model_names, rotation=45)
+        ax4.set_ylabel('Number of Influential Observations')
+        ax4.set_title('Influence Diagnostics (k > 0.7)')
+        ax4.grid(True, alpha=0.3)
+        
+        # Add value labels on bars
+        for i, v in enumerate(n_influential):
+            ax4.text(i, v + 0.001, str(v), ha='center', va='bottom')
+    else:
+        ax4.text(0.5, 0.5, 'No influential observations detected', 
+                ha='center', va='center', transform=ax4.transAxes, fontsize=12)
+        ax4.set_title('Influence Diagnostics (k > 0.7)')
     
     plt.tight_layout()
     plt.show()
@@ -566,7 +553,13 @@ def plot_model_comparison_interpretation(
     print("MCELREATH-STYLE MODEL COMPARISON SUMMARY")
     print("="*60)
     print(f"Best Model: {comparison_results['best_model']}")
-    print(f"Information Criterion: {ic_values[best_idx]:.2f}")
+    
+    # Show the best model's IC value, not the maximum IC value
+    best_model_name = comparison_results['best_model']
+    best_model_idx = list(model_names).index(best_model_name)
+    best_model_ic = ic_values[best_model_idx]
+    print(f"Best Model IC Value: {best_model_ic:.2f}")
+    
     print("\nModel Interpretations:")
     for name, interp in comparison_results['interpretation'].items():
         print(f"  {name}: {interp['status']} - {interp['description']}")
@@ -578,7 +571,7 @@ def plot_model_comparison_interpretation(
     if comparison_results['recommendations']['cautions']:
         print("\nCautions:")
         for caution in comparison_results['recommendations']['cautions']:
-            print(f"  ⚠ {caution}")
+            print(f"   {caution}")
     
     print("\nNext Steps:")
     for step in comparison_results['recommendations']['next_steps']:

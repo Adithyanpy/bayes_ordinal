@@ -18,7 +18,7 @@ from .plot_utils import show_and_save
 
 def plot_cutpoints(
     idata,
-    var_name: str = "alpha",
+    var_name: str = None,
     hdi_prob: float = 0.94,
     figsize: Tuple[float, float] = (8, 6)
 ) -> None:
@@ -29,8 +29,8 @@ def plot_cutpoints(
     ----------
     idata : az.InferenceData
         Inference data from fitted model.
-    var_name : str
-        Name of cutpoint variable.
+    var_name : str, optional
+        Name of cutpoint variable. If None, will auto-detect.
     hdi_prob : float
         Width of HDI interval.
     figsize : tuple
@@ -39,20 +39,38 @@ def plot_cutpoints(
     try:
         fig, ax = plt.subplots(figsize=figsize)
         
-        # Get cutpoint samples - handle variable name variations
+        # Auto-detect cutpoint variable if not specified
+        if var_name is None:
+            available_vars = list(idata.posterior.data_vars.keys())
+            # Look for common cutpoint variable names
+            cutpoint_patterns = ['cutpoints', 'cuts', 'thresholds', 'alpha']
+            var_name = None
+            for pattern in cutpoint_patterns:
+                matching_vars = [v for v in available_vars if pattern in v.lower()]
+                if matching_vars:
+                    var_name = matching_vars[0]
+                    break
+            
+            if var_name is None:
+                # Fallback: look for variables with appropriate shape
+                for var in available_vars:
+                    var_data = idata.posterior[var].values
+                    if var_data.ndim >= 2 and var_data.shape[-1] > 1:
+                        var_name = var
+                        break
+        
+        if var_name is None:
+            print("Warning: Could not auto-detect cutpoint variable")
+            print(f"Available variables: {list(idata.posterior.data_vars.keys())}")
+            return
+        
+        # Get cutpoint samples
         try:
             cutpoints = idata.posterior[var_name].values
         except KeyError:
-            # Try to find the variable with the right name pattern
-            available_vars = list(idata.posterior.data_vars.keys())
-            matching_vars = [v for v in available_vars if var_name in v]
-            if matching_vars:
-                cutpoints = idata.posterior[matching_vars[0]].values
-                print(f"Using cutpoint variable: {matching_vars[0]}")
-            else:
-                print(f"Warning: Could not find cutpoint variable '{var_name}'")
-                print(f"Available variables: {available_vars}")
-                return
+            print(f"Warning: Could not find cutpoint variable '{var_name}'")
+            print(f"Available variables: {list(idata.posterior.data_vars.keys())}")
+            return
         
         n_cuts = cutpoints.shape[-1]
         
@@ -92,7 +110,7 @@ def plot_cutpoints(
 
 def plot_coefficient_effects(
     idata,
-    var_name: str = "beta",
+    var_name: str = None,
     feature_names: Optional[List[str]] = None,
     hdi_prob: float = 0.94,
     figsize: Tuple[float, float] = (10, 6)
@@ -104,8 +122,8 @@ def plot_coefficient_effects(
     ----------
     idata : az.InferenceData
         Inference data from fitted model.
-    var_name : str
-        Name of coefficient variable.
+    var_name : str, optional
+        Name of coefficient variable. If None, will auto-detect.
     feature_names : list, optional
         Names of features for labeling.
     hdi_prob : float
@@ -115,8 +133,39 @@ def plot_coefficient_effects(
     """
     fig, ax = plt.subplots(figsize=figsize)
     
+    # Auto-detect coefficient variable if not specified
+    if var_name is None:
+        available_vars = list(idata.posterior.data_vars.keys())
+        # Look for common coefficient variable names
+        coef_patterns = ['beta', 'coefficients', 'coef', 'slopes']
+        var_name = None
+        for pattern in coef_patterns:
+            matching_vars = [v for v in available_vars if pattern in v.lower()]
+            if matching_vars:
+                var_name = matching_vars[0]
+                break
+        
+        if var_name is None:
+            # Fallback: look for variables with appropriate shape
+            for var in available_vars:
+                var_data = idata.posterior[var].values
+                if var_data.ndim >= 2 and var_data.shape[-1] > 1:
+                    var_name = var
+                    break
+    
+    if var_name is None:
+        print("Warning: Could not auto-detect coefficient variable")
+        print(f"Available variables: {list(idata.posterior.data_vars.keys())}")
+        return
+    
     # Get coefficient samples
-    coefs = idata.posterior[var_name].values
+    try:
+        coefs = idata.posterior[var_name].values
+    except KeyError:
+        print(f"Warning: Could not find coefficient variable '{var_name}'")
+        print(f"Available variables: {list(idata.posterior.data_vars.keys())}")
+        return
+    
     n_features = coefs.shape[-1]
     
     if feature_names is None:
@@ -165,7 +214,7 @@ def plot_coefficient_effects(
 
 def plot_forest(
     idata,
-    var_name: str = "beta",
+    var_name: str = None,
     feature_names: Optional[List[str]] = None,
     hdi_prob: float = 0.89,  # McElreath's preferred HDI
     figsize: Tuple[float, float] = (10, 6)
@@ -177,8 +226,8 @@ def plot_forest(
     ----------
     idata : az.InferenceData
         Inference data from fitted model.
-    var_name : str
-        Name of variable to plot.
+    var_name : str, optional
+        Name of variable to plot. If None, will auto-detect.
     feature_names : list, optional
         Names of features for labeling.
     hdi_prob : float, default=0.89
@@ -188,8 +237,39 @@ def plot_forest(
     """
     fig, ax = plt.subplots(figsize=figsize)
     
+    # Auto-detect variable if not specified
+    if var_name is None:
+        available_vars = list(idata.posterior.data_vars.keys())
+        # Look for common variable names
+        var_patterns = ['beta', 'coefficients', 'cutpoints', 'gamma', 'alpha']
+        var_name = None
+        for pattern in var_patterns:
+            matching_vars = [v for v in available_vars if pattern in v.lower()]
+            if matching_vars:
+                var_name = matching_vars[0]
+                break
+        
+        if var_name is None:
+            # Fallback: use first variable with appropriate shape
+            for var in available_vars:
+                var_data = idata.posterior[var].values
+                if var_data.ndim >= 2 and var_data.shape[-1] > 1:
+                    var_name = var
+                    break
+    
+    if var_name is None:
+        print("Warning: Could not auto-detect variable to plot")
+        print(f"Available variables: {list(idata.posterior.data_vars.keys())}")
+        return
+    
     # Get samples
-    samples = idata.posterior[var_name].values
+    try:
+        samples = idata.posterior[var_name].values
+    except KeyError:
+        print(f"Warning: Could not find variable '{var_name}'")
+        print(f"Available variables: {list(idata.posterior.data_vars.keys())}")
+        return
+    
     n_features = samples.shape[-1]
     
     if feature_names is None:
@@ -252,7 +332,7 @@ def plot_contrast(
     idata,
     group1_indices: np.ndarray,
     group2_indices: np.ndarray,
-    parameter: str = "beta",
+    parameter: str = None,
     group_names: Optional[List[str]] = None,
     hdi_prob: float = 0.89,
     figsize: Tuple[float, float] = (12, 5)
@@ -268,8 +348,8 @@ def plot_contrast(
         Indices for first group.
     group2_indices : np.ndarray
         Indices for second group.
-    parameter : str, default="beta"
-        Parameter to contrast.
+    parameter : str, optional
+        Parameter to contrast. If None, will auto-detect.
     group_names : list, optional
         Names for the groups.
     hdi_prob : float, default=0.89
@@ -285,8 +365,38 @@ def plot_contrast(
     if group_names is None:
         group_names = ["Group 1", "Group 2"]
     
+    # Auto-detect parameter if not specified
+    if parameter is None:
+        available_vars = list(idata.posterior.data_vars.keys())
+        # Look for common parameter names
+        param_patterns = ['beta', 'coefficients', 'cutpoints', 'gamma', 'alpha']
+        parameter = None
+        for pattern in param_patterns:
+            matching_vars = [v for v in available_vars if pattern in v.lower()]
+            if matching_vars:
+                parameter = matching_vars[0]
+                break
+        
+        if parameter is None:
+            # Fallback: use first variable with appropriate shape
+            for var in available_vars:
+                var_data = idata.posterior[var].values
+                if var_data.ndim >= 2 and var_data.shape[-1] > 1:
+                    parameter = var
+                    break
+    
+    if parameter is None:
+        print("Warning: Could not auto-detect parameter for contrast analysis")
+        print(f"Available variables: {list(idata.posterior.data_vars.keys())}")
+        return {}
+    
     # Get parameter samples
-    samples = idata.posterior[parameter].values
+    try:
+        samples = idata.posterior[parameter].values
+    except KeyError:
+        print(f"Warning: Could not find parameter '{parameter}'")
+        print(f"Available variables: {list(idata.posterior.data_vars.keys())}")
+        return {}
     
     # Extract group-specific samples
     group1_samples = samples[..., group1_indices, :]
@@ -429,7 +539,7 @@ def plot_model_structure(model: pm.Model) -> None:
             graph.attr(rankdir='TB', size='8,6', dpi='300', nodesep='0.5', ranksep='0.5')
             # Use graphviz's built-in display functionality with controlled size
             graph.render(view=True, format='png', engine='dot', cleanup=True)
-            print("✓ Graphviz visualization displayed successfully!")
+            print(" Graphviz visualization displayed successfully!")
         except Exception as render_error:
             # If rendering fails, just print the DOT representation
             print(graph)
@@ -477,7 +587,7 @@ def draw_causal_graph(
                 graph.attr(rankdir='TB', size='8,6', dpi='300', nodesep='0.5', ranksep='0.5')
                 # Use graphviz's built-in display functionality with controlled size
                 graph.render(view=True, format='png', engine='dot', cleanup=True)
-                print("✓ Graphviz visualization displayed successfully!")
+                print(" Graphviz visualization displayed successfully!")
             except Exception as render_error:
                 # If rendering fails, just print the DOT representation
                 print(graph)
@@ -612,113 +722,105 @@ def plot_category_probabilities(
     idata,
     model,
     X_new: np.ndarray,
-    var_name: str = "y_obs",
+    var_name: str = None,
     n_samples: int = 1000,
     figsize: Tuple[float, float] = (10, 6)
 ) -> None:
     """
-    Plot predicted category probabilities for new data.
+    Plot category probabilities for new data points.
     
     Parameters
     ----------
     idata : az.InferenceData
         Inference data from fitted model.
     model : pm.Model
-        PyMC model object.
+        The fitted PyMC model.
     X_new : np.ndarray
         New feature values for prediction.
-    var_name : str
-        Name of response variable.
+    var_name : str, optional
+        Name of response variable. If None, will auto-detect.
     n_samples : int
         Number of posterior samples to use.
     figsize : tuple
         Figure size.
     """
     try:
-        import pymc as pm
+        # Auto-detect response variable if not specified
+        if var_name is None:
+            available_vars = list(idata.posterior.data_vars.keys())
+            # Look for common response variable names
+            response_patterns = ['y', 'response', 'outcome', 'target']
+            var_name = None
+            for pattern in response_patterns:
+                matching_vars = [v for v in available_vars if pattern in v.lower()]
+                if matching_vars:
+                    var_name = matching_vars[0]
+                    break
+            
+            if var_name is None:
+                # Fallback: look for variables with appropriate shape
+                for var in available_vars:
+                    var_data = idata.posterior[var].values
+                    if var_data.ndim >= 2 and var_data.shape[-1] > 1:
+                        var_name = var
+                        break
         
-        # Sample posterior predictive
+        if var_name is None:
+            print("Warning: Could not auto-detect response variable")
+            print(f"Available variables: {list(idata.posterior.data_vars.keys())}")
+            return
+        
+        # Generate posterior predictive samples
         with model:
             ppc = pm.sample_posterior_predictive(
                 idata,
-                var_names=[var_name]
+                samples=n_samples,
+                var_names=[var_name],
+                return_inferencedata=False
             )
         
-        # Get predictions with error handling
-        try:
-            pred_samples = ppc.posterior_predictive[var_name].values
-        except KeyError:
-            # Try to find the variable with the right name pattern
-            available_vars = list(ppc.posterior_predictive.data_vars.keys())
-            matching_vars = [v for v in available_vars if "y_obs" in v]
-            if matching_vars:
-                pred_samples = ppc.posterior_predictive[matching_vars[0]].values
-                print(f"Using predictive variable: {matching_vars[0]}")
+        # Extract predictions
+        if var_name in ppc:
+            predictions = ppc[var_name]
+        else:
+            # Try to find the prediction variable
+            pred_vars = list(ppc.keys())
+            if pred_vars:
+                predictions = ppc[pred_vars[0]]
+                print(f"Using prediction variable: {pred_vars[0]}")
             else:
-                print(f"Warning: Could not find {var_name} in posterior predictive data")
-                print(f"Available variables: {available_vars}")
+                print("No prediction variables found")
                 return
         
-        # Check if we have valid data
-        if pred_samples.size == 0:
-            print("Warning: No prediction samples available")
-            return
+        # Calculate category probabilities
+        n_categories = len(np.unique(predictions))
+        n_points = X_new.shape[0]
         
-        # Reshape to (samples, observations) by stacking chains and draws
-        n_chains, n_draws, n_obs = pred_samples.shape
-        pred_samples_reshaped = pred_samples.reshape(-1, n_obs)  # (chains*draws, obs)
-        actual_n_samples = pred_samples_reshaped.shape[0]
+        # Initialize probability matrix
+        prob_matrix = np.zeros((n_points, n_categories))
         
-        # Determine number of categories from the data
-        if pred_samples.dtype.kind in 'iuf':  # integer, unsigned integer, float
-            K = int(pred_samples.max()) + 1
-        else:
-            # If not numeric, try to infer from unique values
-            unique_vals = np.unique(pred_samples)
-            K = len(unique_vals)
+        for i in range(n_points):
+            point_predictions = predictions[:, i]
+            for j in range(n_categories):
+                prob_matrix[i, j] = np.mean(point_predictions == j)
         
-        # Validate K
-        if K <= 0 or K > 20:  # Reasonable bounds
-            print(f"Warning: Invalid number of categories K={K}")
-            return
+        # Plot results
+        fig, ax = plt.subplots(figsize=figsize)
         
-        # Compute category probabilities
-        prob_samples = np.zeros((actual_n_samples, n_obs, K))
-        for i in range(actual_n_samples):
-            for j in range(n_obs):
-                # pred_samples_reshaped[i, j] is already a scalar
-                pred_val = int(pred_samples_reshaped[i, j])
-                if 0 <= pred_val < K:  # Bounds check
-                    counts = np.bincount([pred_val], minlength=K)
-                    prob_samples[i, j] = counts / counts.sum()
+        x_pos = np.arange(n_points)
+        width = 0.8 / n_categories
         
-        # Compute mean and HDI
-        mean_probs = prob_samples.mean(axis=0)
-        hdi_low = np.percentile(prob_samples, 2.5, axis=0)
-        hdi_high = np.percentile(prob_samples, 97.5, axis=0)
+        for j in range(n_categories):
+            ax.bar(x_pos + j * width, prob_matrix[:, j], width, 
+                  label=f'Category {j}', alpha=0.8)
         
-        # Check for valid probabilities
-        if np.any(np.isnan(mean_probs)) or np.any(np.isnan(hdi_low)) or np.any(np.isnan(hdi_high)):
-            print("Warning: Invalid probability values detected")
-            return
-        
-        # Plot
-        fig, axes = plt.subplots(1, K, figsize=figsize)
-        if K == 1:
-            axes = [axes]
-        
-        for k in range(K):
-            ax = axes[k]
-            ax.fill_between(
-                range(n_obs), hdi_low[:, k], hdi_high[:, k],
-                alpha=0.3, label='95% HDI'
-            )
-            ax.plot(range(n_obs), mean_probs[:, k], 'o-', label='Mean')
-            ax.set_title(f'Category {k}')
-            ax.set_xlabel('Observation')
-            ax.set_ylabel('Probability')
-            ax.grid(True, alpha=0.3)
-            ax.legend()
+        ax.set_xlabel('Data Point')
+        ax.set_ylabel('Probability')
+        ax.set_title('Category Probabilities for New Data')
+        ax.set_xticks(x_pos + width * (n_categories - 1) / 2)
+        ax.set_xticklabels([f'Point {i+1}' for i in range(n_points)])
+        ax.legend()
+        ax.grid(True, alpha=0.3)
         
         plt.tight_layout()
         show_and_save("category_probabilities")
@@ -833,8 +935,8 @@ def plot_model_comparison_interpretation(
 
 def plot_prior_posterior(
     idata,
-    var_name: str,
-    prior_samples: np.ndarray,
+    var_name: str = None,
+    prior_samples: np.ndarray = None,
     figsize: Tuple[float, float] = (10, 4)
 ) -> None:
     """
@@ -844,93 +946,272 @@ def plot_prior_posterior(
     ----------
     idata : az.InferenceData
         Inference data from fitted model.
-    var_name : str
-        Name of variable to plot.
-    prior_samples : np.ndarray
+    var_name : str, optional
+        Name of variable to plot. If None, will auto-detect.
+    prior_samples : np.ndarray, optional
         Prior samples for comparison.
     figsize : tuple
         Figure size.
     """
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=figsize)
-    
-    # Get posterior samples
-    post_samples = idata.posterior[var_name].values.flatten()
-    
-    # Plot histograms
-    ax1.hist(prior_samples, bins=30, alpha=0.7, label='Prior', density=True)
-    ax1.hist(post_samples, bins=30, alpha=0.7, label='Posterior', density=True)
-    ax1.set_xlabel(var_name)
-    ax1.set_ylabel('Density')
-    ax1.set_title('Prior vs Posterior')
-    ax1.legend()
-    ax1.grid(True, alpha=0.3)
-    
-    # Plot KDE
-    az.plot_dist(prior_samples, ax=ax2, label='Prior')
-    az.plot_dist(post_samples, ax=ax2, label='Posterior')
-    ax2.set_xlabel(var_name)
-    ax2.set_ylabel('Density')
-    ax2.set_title('Prior vs Posterior (KDE)')
-    ax2.legend()
-    ax2.grid(True, alpha=0.3)
-    
-    plt.tight_layout()
-    show_and_save("prior_posterior")
+    try:
+        # Auto-detect variable if not specified
+        if var_name is None:
+            available_vars = list(idata.posterior.data_vars.keys())
+            # Look for common variable names
+            var_patterns = ['beta', 'coefficients', 'cutpoints', 'gamma', 'alpha']
+            var_name = None
+            for pattern in var_patterns:
+                matching_vars = [v for v in available_vars if pattern in v.lower()]
+                if matching_vars:
+                    var_name = matching_vars[0]
+                    break
+            
+            if var_name is None:
+                # Fallback: use first variable with appropriate shape
+                for var in available_vars:
+                    var_data = idata.posterior[var].values
+                    if var_data.ndim >= 2 and var_data.shape[-1] > 1:
+                        var_name = var
+                        break
+        
+        if var_name is None:
+            print("Warning: Could not auto-detect variable for prior-posterior plot")
+            print(f"Available variables: {list(idata.posterior.data_vars.keys())}")
+            return
+        
+        # Get posterior samples
+        try:
+            posterior_samples = idata.posterior[var_name].values
+        except KeyError:
+            print(f"Warning: Could not find variable '{var_name}'")
+            print(f"Available variables: {list(idata.posterior.data_vars.keys())}")
+            return
+        
+        # Flatten posterior samples
+        posterior_flat = posterior_samples.flatten()
+        
+        # Create subplots
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=figsize)
+        
+        # Posterior histogram
+        ax1.hist(posterior_flat, bins=50, alpha=0.7, density=True, 
+                color='steelblue', edgecolor='black')
+        ax1.set_xlabel('Parameter Value')
+        ax1.set_ylabel('Density')
+        ax1.set_title(f'Posterior Distribution: {var_name}')
+        ax1.grid(True, alpha=0.3)
+        
+        # Prior vs Posterior comparison
+        if prior_samples is not None:
+            prior_flat = prior_samples.flatten()
+            
+            # Plot both distributions
+            ax2.hist(prior_flat, bins=50, alpha=0.5, density=True, 
+                    color='red', label='Prior', edgecolor='black')
+            ax2.hist(posterior_flat, bins=50, alpha=0.5, density=True, 
+                    color='blue', label='Posterior', edgecolor='black')
+            
+            ax2.set_xlabel('Parameter Value')
+            ax2.set_ylabel('Density')
+            ax2.set_title('Prior vs Posterior Comparison')
+            ax2.legend()
+            ax2.grid(True, alpha=0.3)
+        else:
+            # Just plot posterior if no prior provided
+            ax2.hist(posterior_flat, bins=50, alpha=0.7, density=True, 
+                    color='steelblue', edgecolor='black')
+            ax2.set_xlabel('Parameter Value')
+            ax2.set_ylabel('Density')
+            ax2.set_title(f'Posterior Distribution: {var_name}')
+            ax2.grid(True, alpha=0.3)
+        
+        plt.tight_layout()
+        show_and_save("prior_posterior")
+        
+    except Exception as e:
+        print(f"Error in plot_prior_posterior: {e}")
+        print("Skipping prior-posterior visualization")
 
-# Note: Prior predictive plotting is handled by run_prior_predictive() in workflow/prior_predictive.py
-# This function is kept for backward compatibility but delegates to the workflow function
 def plot_prior_predictive(
     idata: az.InferenceData,
     y_obs: np.ndarray,
-    var_name: str = "y_obs",
+    var_name: str = None,
     figsize: Tuple[float, float] = (12, 5)
 ) -> None:
     """
-    Plot prior predictive checks (delegates to workflow function).
-    
-    Note: This function is kept for backward compatibility.
-    The actual plotting is handled by run_prior_predictive() in workflow/prior_predictive.py
-    which provides more comprehensive prior predictive analysis.
+    Plot prior predictive checks.
     
     Parameters
     ----------
     idata : az.InferenceData
         Inference data with prior predictive samples.
     y_obs : np.ndarray
-        Observed response variable.
-    var_name : str, default="y_obs"
-        Name of the response variable in idata.
+        Observed response values.
+    var_name : str, optional
+        Name of response variable. If None, will auto-detect.
     figsize : tuple
-        Figure size (ignored, uses workflow defaults).
+        Figure size.
     """
-    print("Note: Prior predictive plotting is handled by run_prior_predictive() workflow function")
-    print("Use bo.run_prior_predictive(model, plot=True) for comprehensive prior predictive analysis")
+    try:
+        # Auto-detect response variable if not specified
+        if var_name is None:
+            available_vars = list(idata.prior_predictive.data_vars.keys())
+            # Look for common response variable names
+            response_patterns = ['y', 'response', 'outcome', 'target']
+            var_name = None
+            for pattern in response_patterns:
+                matching_vars = [v for v in available_vars if pattern in v.lower()]
+                if matching_vars:
+                    var_name = matching_vars[0]
+                    break
+            
+            if var_name is None:
+                # Fallback: use first variable with appropriate shape
+                for var in available_vars:
+                    var_data = idata.prior_predictive[var].values
+                    if var_data.ndim >= 2 and var_data.shape[-1] > 1:
+                        var_name = var
+                        break
+        
+        if var_name is None:
+            print("Warning: Could not auto-detect response variable for prior predictive plot")
+            print(f"Available variables: {list(idata.prior_predictive.data_vars.keys())}")
+            return
+        
+        # Get prior predictive samples
+        try:
+            prior_pred = idata.prior_predictive[var_name].values
+        except KeyError:
+            print(f"Warning: Could not find variable '{var_name}' in prior predictive data")
+            print(f"Available variables: {list(idata.prior_predictive.data_vars.keys())}")
+            return
+        
+        # Flatten samples
+        prior_pred_flat = prior_pred.reshape(-1, prior_pred.shape[-1])
+        
+        # Create subplots
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=figsize)
+        
+        # Prior predictive distribution
+        ax1.hist(prior_pred_flat.flatten(), bins=50, alpha=0.7, density=True, 
+                color='lightblue', edgecolor='black', label='Prior Predictive')
+        ax1.hist(y_obs, bins=50, alpha=0.7, density=True, 
+                color='red', edgecolor='black', label='Observed')
+        ax1.set_xlabel('Response Value')
+        ax1.set_ylabel('Density')
+        ax1.set_title('Prior Predictive vs Observed')
+        ax1.legend()
+        ax1.grid(True, alpha=0.3)
+        
+        # Prior predictive summary statistics
+        n_samples = prior_pred_flat.shape[0]
+        sample_means = np.mean(prior_pred_flat, axis=1)
+        sample_stds = np.std(prior_pred_flat, axis=1)
+        
+        ax2.scatter(sample_means, sample_stds, alpha=0.6, color='steelblue')
+        ax2.axvline(np.mean(y_obs), color='red', linestyle='--', label='Observed Mean')
+        ax2.axhline(np.std(y_obs), color='red', linestyle=':', label='Observed Std')
+        ax2.set_xlabel('Sample Mean')
+        ax2.set_ylabel('Sample Standard Deviation')
+        ax2.set_title('Prior Predictive Summary Statistics')
+        ax2.legend()
+        ax2.grid(True, alpha=0.3)
+        
+        plt.tight_layout()
+        show_and_save("prior_predictive")
+        
+    except Exception as e:
+        print(f"Error in plot_prior_predictive: {e}")
+        print("Skipping prior predictive visualization")
 
-# Note: Posterior predictive plotting is handled by run_posterior_predictive() in workflow/posterior_predictive.py
-# This function is kept for backward compatibility but delegates to the workflow function
 def plot_posterior_predictive(
     ppc: az.InferenceData,
     y_obs: np.ndarray,
-    var_name: str = "y_obs",
+    var_name: str = None,
     figsize: Tuple[float, float] = (12, 5)
 ) -> None:
     """
-    Plot posterior predictive checks (delegates to workflow function).
-    
-    Note: This function is kept for backward compatibility.
-    The actual plotting is handled by run_posterior_predictive() in workflow/posterior_predictive.py
-    which provides more comprehensive posterior predictive analysis.
+    Plot posterior predictive checks.
     
     Parameters
     ----------
     ppc : az.InferenceData
         Posterior predictive samples.
     y_obs : np.ndarray
-        Observed response variable.
-    var_name : str, default="y_obs"
-        Name of the response variable in ppc.
+        Observed response values.
+    var_name : str, optional
+        Name of response variable. If None, will auto-detect.
     figsize : tuple
-        Figure size (ignored, uses workflow defaults).
+        Figure size.
     """
-    print("Note: Posterior predictive plotting is handled by run_posterior_predictive() workflow function")
-    print("Use bo.run_posterior_predictive(model, idata, kind='proportions') for comprehensive posterior predictive analysis")
+    try:
+        # Auto-detect response variable if not specified
+        if var_name is None:
+            available_vars = list(ppc.predictions.data_vars.keys())
+            # Look for common response variable names
+            response_patterns = ['y', 'response', 'outcome', 'target']
+            var_name = None
+            for pattern in response_patterns:
+                matching_vars = [v for v in available_vars if pattern in v.lower()]
+                if matching_vars:
+                    var_name = matching_vars[0]
+                    break
+            
+            if var_name is None:
+                # Fallback: use first variable with appropriate shape
+                for var in available_vars:
+                    var_data = ppc.predictions[var].values
+                    if var_data.ndim >= 2 and var_data.shape[-1] > 1:
+                        var_name = var
+                        break
+        
+        if var_name is None:
+            print("Warning: Could not auto-detect response variable for posterior predictive plot")
+            print(f"Available variables: {list(ppc.predictions.data_vars.keys())}")
+            return
+        
+        # Get posterior predictive samples
+        try:
+            post_pred = ppc.predictions[var_name].values
+        except KeyError:
+            print(f"Warning: Could not find variable '{var_name}' in posterior predictive data")
+            print(f"Available variables: {list(ppc.predictions.data_vars.keys())}")
+            return
+        
+        # Flatten samples
+        post_pred_flat = post_pred.reshape(-1, post_pred.shape[-1])
+        
+        # Create subplots
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=figsize)
+        
+        # Posterior predictive distribution
+        ax1.hist(post_pred_flat.flatten(), bins=50, alpha=0.7, density=True, 
+                color='lightgreen', edgecolor='black', label='Posterior Predictive')
+        ax1.hist(y_obs, bins=50, alpha=0.7, density=True, 
+                color='red', edgecolor='black', label='Observed')
+        ax1.set_xlabel('Response Value')
+        ax1.set_ylabel('Density')
+        ax1.set_title('Posterior Predictive vs Observed')
+        ax1.legend()
+        ax1.grid(True, alpha=0.3)
+        
+        # Posterior predictive summary statistics
+        n_samples = post_pred_flat.shape[0]
+        sample_means = np.mean(post_pred_flat, axis=1)
+        sample_stds = np.std(post_pred_flat, axis=1)
+        
+        ax2.scatter(sample_means, sample_stds, alpha=0.6, color='darkgreen')
+        ax2.axvline(np.mean(y_obs), color='red', linestyle='--', label='Observed Mean')
+        ax2.axhline(np.std(y_obs), color='red', linestyle=':', label='Observed Std')
+        ax2.set_xlabel('Sample Mean')
+        ax2.set_ylabel('Sample Standard Deviation')
+        ax2.set_title('Posterior Predictive Summary Statistics')
+        ax2.legend()
+        ax2.grid(True, alpha=0.3)
+        
+        plt.tight_layout()
+        show_and_save("posterior_predictive")
+        
+    except Exception as e:
+        print(f"Error in plot_posterior_predictive: {e}")
+        print("Skipping posterior predictive visualization")

@@ -40,15 +40,45 @@ n, K = 100, 4
 X = np.random.normal(size=(n, 2))
 y = np.random.randint(0, K, size=n)
 
-# Run complete workflow
-results = bo.run_workflow(
-    model_fn={"cumulative": bo.cumulative_model, "partial": bo.partial_odds_model},
-    y=y, X=X, K=K,
-    config={"draws": 1000, "tune": 1000, "chains": 4}
-)
+# Build and fit model
+model = bo.cumulative_model(y=y, X=X, K=K)
 
-# View results
-print(results["diagnostics"]["cumulative"])
+# Run prior predictive check
+prior_idata = bo.run_prior_predictive(model, draws=200)
+
+# Fit model
+idata = bo.fit_ordinal_model(model, draws=1000, tune=1000, chains=4)
+
+# Check diagnostics
+convergence = bo.check_convergence(idata)
+print(f"Converged: {convergence['converged']}")
+
+# Run posterior predictive check
+ppc = bo.run_posterior_predictive(model, idata)
+```
+
+### Prior Predictive Checks with Custom Plots
+
+```python
+# Run prior predictive with default plots (mean + observed only)
+idata = bo.run_prior_predictive(model, draws=1000, y_obs=y)
+
+# Run prior predictive with all plots
+custom_plots = {
+    'prior_samples': True,      # Show prior predictive samples
+    'mean_distribution': True,  # Show mean distribution
+    'observed': True,           # Show observed data (bars)
+    'category_counts': True,    # Show category counts
+    'total_observations': True, # Show total observations
+    'category_proportions': True # Show category proportions
+}
+
+idata = bo.run_prior_predictive(
+    model, 
+    draws=1000, 
+    y_obs=y,
+    custom_plots=custom_plots
+)
 ```
 
 ### Using Configuration System
@@ -67,12 +97,11 @@ custom_config.name = "my_analysis"
 custom_config.sampling.draws = 2000
 custom_config.workflow.run_sensitivity_analysis = True
 
-# Run complete workflow
-results = bo.run_workflow(
-    model_fn=bo.cumulative_model,
-    y=y, X=X, K=K,
-    config=custom_config.get_workflow_config()
-)
+# Build and run analysis step by step
+model = bo.cumulative_model(y=y, X=X, K=K)
+prior_idata = bo.run_prior_predictive(model, draws=200)
+idata = bo.fit_ordinal_model(model, draws=custom_config.sampling.draws)
+ppc = bo.run_posterior_predictive(model, idata)
 ```
 
 ### Command Line Interface
@@ -104,7 +133,7 @@ The cumulative model assumes proportional odds across categories:
 model = bo.cumulative_model(
     y=y, X=X, K=4,
     link="logit",  # or "probit", "cloglog"
-    priors=bo.get_default_priors()
+    priors={"coef_mu": 0.0, "coef_sigma": 2.0, "u_sigma": 1.0}
 )
 ```
 
@@ -115,7 +144,7 @@ The partial odds model allows effects to vary by category:
 ```python
 model = bo.partial_odds_model(
     y=y, X=X, K=4,
-    priors=bo.get_default_priors()
+    priors={"coef_mu": 0.0, "coef_sigma": 2.0, "u_sigma": 1.0}
 )
 ```
 
@@ -124,17 +153,17 @@ model = bo.partial_odds_model(
 ### 1. Prior Specification
 
 ```python
-# Default priors
-priors = bo.get_default_priors()
+# Direct prior specifications
+priors = {"coef_mu": 0.0, "coef_sigma": 2.0, "u_sigma": 1.0}
 
-# Weakly informative priors
-priors = bo.get_weakly_informative_priors()
-
-# Custom informative priors
-priors = bo.get_informative_priors(
-    coef_means=np.array([0.5, -0.3]),
-    coef_sds=np.array([1.0, 1.0])
-)
+# Custom priors for specific features
+priors = {
+    "coef_mu": 0.0,
+    "coef_sigma": 2.0,
+    "u_sigma": 1.0,
+    "gamma_mu": 0.0,
+    "gamma_sigma": 1.5
+}
 ```
 
 ### 2. Prior Predictive Checks
@@ -275,30 +304,36 @@ y = np.random.randint(0, K, size=n)
 # 2. Validate data
 y_clean, X_clean, K = bo.validate_ordinal_data(y, X, K)
 
-# 3. Run complete workflow
-results = bo.run_workflow(
-    model_fn={
-        "cumulative": bo.cumulative_model,
-        "partial": bo.partial_odds_model
-    },
-    y=y_clean, X=X_clean, K=K,
-    config={
-        "draws": 2000,
-        "tune": 1000,
-        "chains": 4,
-        "run_prior": True,
-        "run_ppc": True,
-        "run_diagnostics": True,
-        "run_cv": True
-    }
-)
+# 3. Build and compare models
+models = {
+    "cumulative": bo.cumulative_model(y=y_clean, X=X_clean, K=K),
+    "partial": bo.partial_odds_model(y=y_clean, X=X_clean, K=K)
+}
 
-# 4. Examine results
-print("Model Comparison:")
-print(results["cv"])
+# 4. Fit models
+idatas = {}
+for name, model in models.items():
+    # Prior predictive check
+    prior_idata = bo.run_prior_predictive(model, draws=200)
+    
+    # Fit model
+    idata = bo.fit_ordinal_model(model, draws=2000, tune=1000, chains=4)
+    idatas[name] = idata
+    
+    # Posterior predictive check
+    ppc = bo.run_posterior_predictive(model, idata)
 
+# 5. Model comparison and examine results
+comparison = bo.compare_models(models, idatas, ic="loo")
+print(comparison)  # Cross-validation results
 print("\nDiagnostics:")
-print(results["diagnostics"]["cumulative"][["r_hat", "ess_bulk", "n_divergences"]])
+for name, idata in idatas.items():
+    convergence = bo.check_convergence(idata)
+    print(f"{name}: Converged = {convergence['converged']}")
+    
+    diag_df = bo.summarize_diagnostics(idata)
+    print(f"{name} R-hat max: {diag_df['r_hat'].max():.4f}")
+    print(f"{name} ESS min: {diag_df['ess_bulk'].min():.0f}")
 ```
 
 ## Dependencies

@@ -1,209 +1,194 @@
 import pymc as pm
 import arviz as az
-from pymc.exceptions import SamplingError
-from typing import Optional
-import warnings
+import numpy as np
+from typing import Optional, Dict, Any
 
-def fit_model(
+def fit_ordinal_model(
     model: pm.Model,
-    draws: int = 1000,
+    draws: int = 2000,
     tune: int = 1000,
     chains: int = 4,
     return_inferencedata: bool = True,
     init: str = "jitter+adapt_diag",
-    initvals: dict | None = None,
-    jitter_max_retries: int = 5,
+    jitter_max_retries: int = 10,
     sampler: str = "nuts",
     nuts_sampler: str = "pymc",
-    random_seed: int = 42,
+    random_seed: Optional[int] = 42,
     enable_log_likelihood: bool = True,
+    target_accept: float = 0.8,
+    max_treedepth: int = 15,
+    progressbar: bool = True,
+    compute_convergence_checks: bool = True,
     **sample_kwargs
 ) -> az.InferenceData:
     """
-    Fit a PyMC model using advanced sampling methods - OPTIMIZED FOR FIXED MODELS.
-
-    This version is optimized to work with the fixed ordinal regression models
-    that enable log-likelihood computation without initvals conflicts.
-
-    Supports multiple sampling strategies:
-    - "nuts": Standard NUTS/HMC (default, most reliable)
-    - "smc": Sequential Monte Carlo for complex posteriors
-    - "approx": Approximate sampling for quick exploration
-
+    Fit a Bayesian ordinal regression model using NUTS sampling.
+    
+    This function is specifically designed for ordinal regression models (cumulative,
+    partial odds, etc.) and implements best practices for reliable inference:
+    - Uses NUTS sampler with ordinal-optimized tuning parameters
+    - Enables log-likelihood computation for LOO/WAIC model comparison
+    - Implements robust initialization with multiple retry attempts
+    - Sets conservative sampling parameters for ordinal models with cutpoints
+    
     Parameters
     ----------
     model : pm.Model
-        A fully specified PyMC model.
-    draws : int, default=1000
-        Number of posterior draws to sample.
+        A PyMC ordinal regression model (e.g., from cumulative_model, partial_odds_model).
+    draws : int, default=2000
+        Number of posterior draws. Higher values recommended for ordinal models.
     tune : int, default=1000
-        Number of tuning steps (for NUTS).
+        Number of tuning steps for NUTS adaptation.
     chains : int, default=4
-        Number of MCMC chains to run.
+        Number of MCMC chains for reliable inference.
     return_inferencedata : bool, default=True
         Whether to return ArviZ InferenceData.
     init : str, default="jitter+adapt_diag"
-        Initialization method passed to `pm.sample`.
-    initvals : dict, optional
-        Dictionary of variable initial values.
-        Note: Fixed models don't need this - conservative priors handle initialization.
-    jitter_max_retries : int, default=5
+        Initialization method. Robust for ordinal models with cutpoints.
+    jitter_max_retries : int, default=10
         Number of retries if initialization fails.
-    sampler : {"nuts", "smc", "approx"}, default="nuts"
-        Sampling method to use:
-        - "nuts": Standard NUTS/HMC (most reliable)
-        - "smc": Sequential Monte Carlo (good for complex posteriors)
-        - "approx": Approximate sampling (fast exploration)
-    nuts_sampler : {"pymc", "numpyro"}, default="pymc"
-        NUTS implementation to use. "numpyro" can handle complex models better
-        but requires JAX installation.
+    sampler : str, default="nuts"
+        Sampling method (NUTS is optimal for ordinal models).
+    nuts_sampler : str, default="pymc"
+        NUTS implementation to use.
+    random_seed : Optional[int], default=42
+        Random seed for reproducibility.
     enable_log_likelihood : bool, default=True
         Whether to compute log-likelihood for model comparison.
-        Fixed models support this without conflicts.
+    target_accept : float, default=0.8
+        Target acceptance rate for NUTS. Optimal for ordinal models.
+    max_treedepth : int, default=15
+        Maximum tree depth for NUTS. Higher for models with many cutpoints.
+    progressbar : bool, default=True
+        Whether to show sampling progress bar and chain information.
+    compute_convergence_checks : bool, default=True
+        Whether to compute and display convergence diagnostics during sampling.
     **sample_kwargs : dict
-        Additional keyword arguments passed to the sampling function.
+        Additional keyword arguments passed to pm.sample().
 
     Returns
     -------
     idata : az.InferenceData
-        ArviZ InferenceData with posterior and sample statistics.
-
+        ArviZ InferenceData with posterior samples and log-likelihood.
+        
     Notes
     -----
-    This optimized version:
-    - Automatically enables log-likelihood computation for fixed models
-    - Handles initvals conflicts intelligently
-    - Provides better error messages and fallback strategies
-    - Optimized for the new fixed ordinal regression models
-
-    Examples
-    --------
-    >>> # Standard usage with fixed models
-    >>> idata = fit_model(my_model, draws=2000, tune=1000)
-    >>> # Enable model comparison
-    >>> idata = fit_model(my_model, enable_log_likelihood=True)
-    >>> # Use NumPyro for complex models (requires JAX)
-    >>> idata = fit_model(my_model, nuts_sampler="numpyro")
+    Ordinal regression models require careful sampling due to cutpoint constraints:
+    - draws >= 2000 for reliable posterior estimates of cutpoints
+    - tune >= 1000 for proper NUTS adaptation to cutpoint geometry
+    - target_accept = 0.8 for optimal mixing in constrained parameter space
+    - max_treedepth = 15 for complex models with many ordinal categories
     """
     
-    # Check if model uses fixed implementation (no default initvals)
-    has_default_initvals = hasattr(model, '_default_initvals')
-    uses_initvals_in_model = any(v is not None for v in model.rvs_to_initial_values.values())
+    if sampler != "nuts":
+        raise ValueError("Only NUTS sampler is supported for ordinal regression models")
     
-    # Determine effective initvals (user or model default)
-    default_iv = getattr(model, "_default_initvals", None)
-    effective_initvals = initvals if initvals is not None else default_iv
-
+    # Validate ordinal model structure
+    if not _is_ordinal_model(model):
+        raise ValueError("Model must be an ordinal regression model with 'y' as observed variable and cutpoints")
+    
     with model:
-        if sampler == "nuts":
-            # Standard NUTS sampling - optimized for fixed models
-            kwargs = dict(
-                draws=draws,
-                tune=tune,
-                chains=chains,
-                init=init,
-                jitter_max_retries=jitter_max_retries,
-                return_inferencedata=return_inferencedata,
-                nuts_sampler=nuts_sampler,
-                random_seed=random_seed,
-                **sample_kwargs
-            )
-            
-            # Smart log-likelihood handling for fixed models
-            if enable_log_likelihood:
-                if not has_default_initvals and not uses_initvals_in_model:
-                    # Fixed models - log-likelihood should work
-                    kwargs["idata_kwargs"] = {"log_likelihood": True}
-                    print("✓ Fixed model detected - enabling log-likelihood computation")
-                elif nuts_sampler == "numpyro":
-                    # NumPyro can handle models with initvals
-                    kwargs["idata_kwargs"] = {"log_likelihood": True}
-                    print("✓ NumPyro sampler - enabling log-likelihood computation")
-                else:
-                    # Legacy models with initvals - warn user
-                    warnings.warn(
-                        "Model appears to use initvals which may conflict with log-likelihood computation. "
-                        "Consider using fixed model implementations or nuts_sampler='numpyro'.",
-                        UserWarning
-                    )
-                    print("⚠ Initvals detected - skipping log-likelihood to avoid conflicts")
-            
-            # Add initvals if provided and needed
-            if effective_initvals is not None and not has_default_initvals:
-                kwargs["initvals"] = effective_initvals
-                print("✓ Using provided initvals")
-            elif has_default_initvals:
-                print("⚠ Model has default initvals - may conflict with log-likelihood")
-            
-            try:
-                return pm.sample(**kwargs)
-            except Exception as e:
-                if "log_likelihood" in str(e) and enable_log_likelihood:
-                    print("⚠ Log-likelihood computation failed - retrying without it")
-                    # Remove log_likelihood and try again
-                    kwargs.pop("idata_kwargs", None)
-                    return pm.sample(**kwargs)
-                else:
-                    raise e
-            
-        elif sampler == "smc":
-            # Sequential Monte Carlo for complex posteriors
-            kwargs = dict(
-                draws=draws,
-                **sample_kwargs
-            )
-            idata = pm.sample_smc(**kwargs)
-            return idata
+        # NUTS sampling with ordinal-optimized parameters
+        kwargs = dict(
+            draws=draws,
+            tune=tune,
+            chains=chains,
+            init=init,
+            jitter_max_retries=jitter_max_retries,
+            return_inferencedata=return_inferencedata,
+            nuts_sampler=nuts_sampler,
+            random_seed=random_seed,
+            target_accept=target_accept,
+            max_treedepth=max_treedepth,
+            **sample_kwargs
+        )
+        
+        # Enable log-likelihood for model comparison (essential for ordinal models)
+        if enable_log_likelihood:
+            kwargs["idata_kwargs"] = {"log_likelihood": True}
+        
+        try:
+            # Ensure progress tracking and diagnostics are enabled
+            if "progressbar" not in kwargs:
+                kwargs["progressbar"] = True
+            if "compute_convergence_checks" not in kwargs:
+                kwargs["compute_convergence_checks"] = True
                 
-        elif sampler == "approx":
-            # Approximate sampling for quick exploration
-            kwargs = dict(
-                draws=draws,
-                **sample_kwargs
-            )
-            # Use ADVI as the default approximation method
-            approx = pm.fit(method='advi', **kwargs)
-            idata = approx.sample(draws=draws)
-            return az.from_pymc3(idata) if hasattr(az, 'from_pymc3') else idata
-            
-        else:
-            raise ValueError(f"Unknown sampler {sampler!r}; choose 'nuts', 'smc', or 'approx'")
+            return pm.sample(**kwargs)
+        except Exception as e:
+            raise RuntimeError(f"Sampling failed for ordinal regression model: {e}. "
+                             f"Common issues: insufficient tuning, poor initialization, or model specification. "
+                             f"Try increasing tune, adjusting priors, or checking cutpoint constraints.")
 
 
-def fit_model_with_comparison(
+def _is_ordinal_model(model: pm.Model) -> bool:
+    """
+    Check if the model is a valid Bayesian ordinal regression model.
+    
+    Parameters
+    ----------
+    model : pm.Model
+        PyMC model to check
+        
+    Returns
+    -------
+    bool
+        True if model has ordinal regression structure
+    """
+    # Check for observed ordinal variable (must be named 'y')
+    observed_vars = [rv.name for rv in model.observed_RVs]
+    if not any('y' in name for name in observed_vars):
+        return False
+    
+    # Check for cutpoints (essential for ordinal regression)
+    free_vars = [rv.name for rv in model.free_RVs]
+    if not any('cutpoint' in name for name in free_vars):
+        return False
+    
+    # Check for coefficients (beta parameters)
+    if not any('beta' in name for name in free_vars):
+        return False
+    
+    return True
+
+
+def fit_ordinal_model_with_comparison(
     model: pm.Model,
-    draws: int = 1000,
+    draws: int = 2000,
     tune: int = 1000,
     chains: int = 4,
     **kwargs
 ) -> az.InferenceData:
     """
-    Convenience function to fit a model with log-likelihood enabled for comparison.
+    Convenience function to fit an ordinal regression model with log-likelihood enabled.
     
-    This is equivalent to fit_model(..., enable_log_likelihood=True) but makes
-    the intent clear for model comparison workflows.
+    This function automatically enables log-likelihood computation for LOO/WAIC
+    model comparison, which is essential for ordinal regression model selection.
     
     Parameters
     ----------
     model : pm.Model
-        PyMC model to fit
-    draws, tune, chains : int
-        Sampling parameters
+        PyMC ordinal regression model to fit
+    draws : int, default=2000
+        Number of posterior draws (recommended for ordinal models)
+    tune : int, default=1000
+        Number of tuning steps for NUTS adaptation
+    chains : int, default=4
+        Number of MCMC chains for reliable inference
     **kwargs
-        Additional arguments passed to fit_model
+        Additional arguments passed to fit_ordinal_model
         
     Returns
     -------
     az.InferenceData
-        Fitted model with log-likelihood for comparison
+        Fitted ordinal regression model with log-likelihood for comparison
         
-    Examples
-    --------
-    >>> idata1 = fit_model_with_comparison(model1)
-    >>> idata2 = fit_model_with_comparison(model2)
-    >>> az.compare({"model1": idata1, "model2": idata2})
+    Notes
+    -----
+    This function automatically sets enable_log_likelihood=True and uses
+    ordinal-optimized default parameters for reliable model comparison.
     """
-    return fit_model(
+    return fit_ordinal_model(
         model,
         draws=draws,
         tune=tune,
@@ -213,67 +198,132 @@ def fit_model_with_comparison(
     )
 
 
-def diagnose_fitting_issues(model: pm.Model) -> dict:
+def fit_ordinal_model_robust(
+    model: pm.Model,
+    draws: int = 2000,
+    tune: int = 1000,
+    chains: int = 4,
+    **kwargs
+) -> az.InferenceData:
     """
-    Diagnose potential fitting issues with a model.
+    Robust fitting function for ordinal regression models with enhanced diagnostics.
     
-    This function checks for common issues that can cause sampling problems
-    and provides recommendations for fixing them.
+    This function provides comprehensive validation, ordinal-specific parameters,
+    and enhanced error handling for reliable fitting of ordinal regression models.
     
     Parameters
     ----------
     model : pm.Model
-        PyMC model to diagnose
+        PyMC ordinal regression model (e.g., from cumulative_model, partial_odds_model)
+    draws : int, default=2000
+        Number of posterior draws (recommended for ordinal models)
+    tune : int, default=1000
+        Number of tuning steps for NUTS adaptation
+    chains : int, default=4
+        Number of MCMC chains for reliable inference
+    **kwargs
+        Additional arguments passed to fit_ordinal_model
         
     Returns
     -------
-    dict
-        Diagnosis results with recommendations
+    az.InferenceData
+        Fitted ordinal regression model with diagnostics
         
-    Examples
-    --------
-    >>> diagnosis = diagnose_fitting_issues(my_model)
-    >>> print(diagnosis['recommendations'])
+    Notes
+    -----
+    This function is the recommended way to fit ordinal regression models as it:
+    - Validates complete ordinal model structure (y, cutpoints, beta)
+    - Uses ordinal-optimized sampling parameters
+    - Provides comprehensive error messages for debugging
+    - Ensures log-likelihood computation for model comparison
+    - Handles common ordinal model fitting issues
     """
-    issues = []
-    recommendations = []
+    # Validate that this is an ordinal regression model
+    if not _is_ordinal_model(model):
+        raise ValueError(
+            "Model must be a Bayesian ordinal regression model. "
+            "Use cumulative_model() or partial_odds_model() to create the model."
+        )
     
-    # Check for initvals conflicts
-    has_default_initvals = hasattr(model, '_default_initvals')
-    uses_model_initvals = any(v is not None for v in model.rvs_to_initial_values.values())
-    
-    if has_default_initvals or uses_model_initvals:
-        issues.append("Model uses initvals which may conflict with log-likelihood computation")
-        recommendations.append("Consider using fixed model implementations for better compatibility")
-    
-    # Check model complexity
-    n_free_vars = len(model.free_RVs)
-    n_observed = len(model.observed_RVs)
-    
-    if n_free_vars > 50:
-        issues.append(f"Model has many parameters ({n_free_vars})")
-        recommendations.append("Consider using nuts_sampler='numpyro' for better performance")
-    
-    if n_observed == 0:
-        issues.append("Model has no observed variables")
-        recommendations.append("Ensure your model includes observed data")
-    
-    # Check for potential numerical issues
-    for rv in model.free_RVs:
-        if hasattr(rv, 'transform') and rv.transform is not None:
-            if 'ordered' in str(rv.transform):
-                if uses_model_initvals:
-                    issues.append(f"Ordered variable {rv.name} uses initvals")
-                    recommendations.append("Use informative priors instead of initvals for ordered variables")
-    
-    return {
-        "has_issues": len(issues) > 0,
-        "issues": issues,
-        "recommendations": recommendations,
-        "model_info": {
-            "n_free_vars": n_free_vars,
-            "n_observed": n_observed,
-            "has_default_initvals": has_default_initvals,
-            "uses_model_initvals": uses_model_initvals
-        }
+    # Use ordinal-specific defaults for robust fitting
+    ordinal_kwargs = {
+        "target_accept": 0.8,
+        "max_treedepth": 15,
+        "enable_log_likelihood": True,
+        **kwargs
     }
+    
+    return fit_ordinal_model(
+        model,
+        draws=draws,
+        tune=tune,
+        chains=chains,
+        **ordinal_kwargs
+    )
+
+
+def fit_ordinal_model_quick(
+    model: pm.Model,
+    draws: int = 500,
+    tune: int = 500,
+    chains: int = 2,
+    **kwargs
+) -> az.InferenceData:
+    """
+    Quick fitting function for ordinal regression models during development.
+    
+    This function is designed for rapid testing and debugging of ordinal models
+    with minimal sampling but sufficient for basic validation.
+    
+    Parameters
+    ----------
+    model : pm.Model
+        PyMC ordinal regression model to test
+    draws : int, default=500
+        Number of posterior draws (minimal for quick testing)
+    tune : int, default=500
+        Number of tuning steps (minimal for quick testing)
+    chains : int, default=2
+        Number of MCMC chains (minimal for quick testing)
+    **kwargs
+        Additional arguments passed to fit_ordinal_model
+        
+    Returns
+    -------
+    az.InferenceData
+        Fitted ordinal regression model with minimal samples
+        
+    Notes
+    -----
+    This function is intended for:
+    - Model development and debugging
+    - Quick validation of model structure
+    - Testing prior specifications
+    - NOT for final inference or publication
+    
+    For production use, use fit_ordinal_model() or fit_ordinal_model_robust().
+    """
+    # Validate that this is an ordinal regression model
+    if not _is_ordinal_model(model):
+        raise ValueError(
+            "Model must be a Bayesian ordinal regression model. "
+            "Use cumulative_model() or partial_odds_model() to create the model."
+        )
+    
+    # Use minimal parameters for quick testing
+    quick_kwargs = {
+        "target_accept": 0.8,
+        "max_treedepth": 10,
+        "enable_log_likelihood": True,
+        **kwargs
+    }
+    
+    return fit_ordinal_model(
+        model,
+        draws=draws,
+        tune=tune,
+        chains=chains,
+        **quick_kwargs
+    )
+
+

@@ -238,6 +238,8 @@ def check_convergence(
             'n_bad_rhat': 0,
             'n_bad_ess': 0,
             'n_divergences': 0,
+            'rhat_max': float('nan'),
+            'ess_min': float('nan'),
             'converged': False,
             'summary': pd.DataFrame(),
             'insufficient_samples': True
@@ -257,10 +259,16 @@ def check_convergence(
         # Check divergences
         n_divergences = idata.sample_stats['diverging'].sum().item()
         
+        # Extract max R-hat and min ESS for compatibility
+        rhat_max = summary['r_hat'].max() if len(summary) > 0 else float('nan')
+        ess_min = summary['ess_bulk'].min() if len(summary) > 0 else float('nan')
+        
         return {
             'n_bad_rhat': n_bad_rhat,
             'n_bad_ess': n_bad_ess,
             'n_divergences': n_divergences,
+            'rhat_max': rhat_max,
+            'ess_min': ess_min,
             'converged': (n_bad_rhat == 0) and (n_bad_ess == 0) and (n_divergences == 0),
             'summary': summary,
             'insufficient_samples': False
@@ -271,6 +279,8 @@ def check_convergence(
             'n_bad_rhat': 0,
             'n_bad_ess': 0,
             'n_divergences': 0,
+            'rhat_max': float('nan'),
+            'ess_min': float('nan'),
             'converged': False,
             'summary': pd.DataFrame(),
             'error': str(e)

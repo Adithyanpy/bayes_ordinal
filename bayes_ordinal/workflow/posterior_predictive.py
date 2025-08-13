@@ -7,7 +7,7 @@ from ..plot_utils import show_and_save
 def run_posterior_predictive(
     model,
     idata: az.InferenceData,
-    var_name: str = "y_obs",
+    var_name: str = "y",  # PyMCOrdinal docs use "y" as default
     kind: str = "proportions",
     figsize=(6, 4),
 ):
@@ -25,8 +25,8 @@ def run_posterior_predictive(
         The PyMC model used for sampling.
     idata : az.InferenceData
         Inference data containing the posterior draws.
-    var_name : str, default="y_obs"
-        Name of the observed variable.
+    var_name : str, default="y"
+        Name of the observed variable (PyMCOrdinal convention: "y").
     kind : {"proportions", "hist", "ecdf"}, default="proportions"
         Type of plot to generate.
     figsize : tuple, default=(6, 4)
@@ -40,7 +40,7 @@ def run_posterior_predictive(
     Examples
     --------
     >>> ppc = run_posterior_predictive(model, idata, kind="proportions")
-    >>> ppc.posterior_predictive["y_obs"].shape
+    >>> ppc.posterior_predictive["y"].shape
     """
     # 1) sample posterior predictive
     ppc = pm.sample_posterior_predictive(

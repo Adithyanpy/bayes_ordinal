@@ -29,7 +29,7 @@ def summarize_diagnostics(
     Examples
     --------
     >>> summary = summarize_diagnostics(idata)
-    >>> summary = summarize_diagnostics(idata, var_names=["beta", "alpha"])
+    >>> summary = summarize_diagnostics(idata, var_names=["beta", "cutpoints"])
     """
     # Check if we have enough samples for reliable diagnostics
     n_chains = idata.posterior.dims.get('chain', 0)
@@ -103,13 +103,25 @@ def summarize_diagnostics(
         print(f"Error computing energy diagnostics: {e}")
         summary_df["max_energy_diff"] = 0.0
 
-    # 4) Advanced diagnostics (simplified to avoid hangs)
-    summary_df["mcse_mean"] = np.nan
-    summary_df["mcse_sd"] = np.nan
-    
-    # Skip heavy computations that can cause hangs
-    print("Advanced diagnostics (LOO-PIT, energy plots, trace plots) skipped for stability")
-    print("Use basic summary for convergence assessment")
+    # 4) Check for log likelihood availability (needed for LOO/WAIC)
+    try:
+        if "log_likelihood" in idata:
+            print(" Log likelihood available for LOO/WAIC calculations")
+            summary_df["log_likelihood_available"] = True
+        elif "log_likelihood" in idata.posterior_predictive:
+            print(" Log likelihood available in posterior predictive for LOO/WAIC calculations")
+            summary_df["log_likelihood_available"] = True
+        elif "log_likelihood" in idata.sample_stats:
+            print(" Log likelihood available in sample_stats for LOO/WAIC calculations")
+            summary_df["log_likelihood_available"] = True
+        else:
+            print(" Log likelihood not found - LOO/WAIC calculations will fail")
+            print("  This is needed for model comparison diagnostics")
+            print("  Ensure you use log_likelihood=True in pm.sample()")
+            summary_df["log_likelihood_available"] = False
+    except Exception as e:
+        print(f"Error checking log likelihood: {e}")
+        summary_df["log_likelihood_available"] = False
 
     return summary_df
 
@@ -195,7 +207,7 @@ def run_comprehensive_diagnostics(
                 if n_divergences > 0:
                     results["recommendations"].append(f"Found {n_divergences} divergences - check model specification")
             
-            print(f"✓ Diagnostic summary completed")
+            print(f" Diagnostic summary completed")
             print(f"  Model: {model_name}")
             print(f"  Summary shape: {summary_df.shape}")
             print(f"  R-hat column exists: {'r_hat' in summary_df.columns}")
@@ -206,15 +218,15 @@ def run_comprehensive_diagnostics(
                 print(f"  Recommendations: {', '.join(results['recommendations'])}")
                 
         except Exception as e:
-            print(f"⚠ Diagnostic summary failed: {e}")
+            print(f" Diagnostic summary failed: {e}")
     
     # 2. Create diagnostic plots
     if include_plots:
         try:
             plot_diagnostics(idata, var_names=var_names)
-            print(f"✓ Diagnostic plots completed")
+            print(f" Diagnostic plots completed")
         except Exception as e:
-            print(f"⚠ Diagnostic plots failed: {e}")
+            print(f" Diagnostic plots failed: {e}")
     
     return results
 
@@ -250,17 +262,17 @@ def plot_diagnostics(
     
     if var_names is None:
         # Use main parameters if no specific variables provided
-        # Look for common parameter patterns in the model
+        # Look for common parameter patterns in the model (prioritizing PyMCOrdinal convention)
         available_vars = list(idata.posterior.data_vars.keys())
         var_names = []
         
-        # Add beta parameters (coefficients)
+        # Add beta parameters (coefficients) - PyMCOrdinal docs use "beta"
         beta_vars = [v for v in available_vars if "beta" in v.lower()]
         var_names.extend(beta_vars)
         
-        # Add alpha parameters (cutpoints)
-        alpha_vars = [v for v in available_vars if "alpha" in v.lower()]
-        var_names.extend(alpha_vars)
+        # Add cutpoints parameters - PyMCOrdinal docs use "cutpoints" (not "alpha")
+        cutpoint_vars = [v for v in available_vars if "cutpoints" in v.lower()]
+        var_names.extend(cutpoint_vars)
         
         # If no specific patterns found, use first few variables
         if not var_names and available_vars:
@@ -271,41 +283,41 @@ def plot_diagnostics(
     # 1. Energy plot (most important for convergence)
     if include_energy and "sample_stats" in idata and "energy" in idata.sample_stats:
         try:
-            print("✓ Creating energy plot...")
+            print(" Creating energy plot...")
             az.plot_energy(idata)
             plt.title("Energy Plot - Check for Divergences")
             plt.show()
         except Exception as e:
-            print(f"⚠ Energy plot failed: {e}")
+            print(f" Energy plot failed: {e}")
     
     # 2. Trace plots
     if include_trace:
         try:
-            print("✓ Creating trace plots...")
+            print(" Creating trace plots...")
             az.plot_trace(idata, var_names=var_names)
             plt.show()
         except Exception as e:
-            print(f"⚠ Trace plots failed: {e}")
+            print(f" Trace plots failed: {e}")
     
     # 3. Rank plots
     if include_rank:
         try:
-            print("✓ Creating rank plots...")
+            print(" Creating rank plots...")
             az.plot_rank(idata, var_names=var_names)
             plt.show()
         except Exception as e:
-            print(f"⚠ Rank plots failed: {e}")
+            print(f" Rank plots failed: {e}")
     
     # 4. Autocorrelation plots
     if include_autocorr:
         try:
-            print("✓ Creating autocorrelation plots...")
+            print(" Creating autocorrelation plots...")
             az.plot_autocorr(idata, var_names=var_names)
             plt.show()
         except Exception as e:
-            print(f"⚠ Autocorrelation plots failed: {e}")
+            print(f" Autocorrelation plots failed: {e}")
     
-    print("✓ Diagnostic plots completed")
+    print(" Diagnostic plots completed")
 
 def plot_group_forest(
     idata: az.InferenceData,

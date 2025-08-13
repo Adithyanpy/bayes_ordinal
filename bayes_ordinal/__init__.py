@@ -5,38 +5,31 @@ A PyMC-based package for Bayesian ordinal regression with comprehensive workflow
 """
 
 # Core models
-from .models.cumulative import cumulative_model, run_counterfactual_analysis, plot_counterfactual_results
+from .models.cumulative import cumulative_model
 from .models.partial_odds import partial_odds_model
-from .models.pymcordinal_compatible import (
-    constrained_uniform, make_model, sample_model, create_pymcordinal_workflow
-)
+
+# Analysis functions
+from .analysis.counterfactual import run_counterfactual_analysis, plot_counterfactual_results
+
+# Utility functions
+from .utils.model_inspection import inspect_model_variables, print_model_summary
 
 # Workflow components
-from .workflow.fitting import fit_model
+from .workflow.fitting import fit_ordinal_model
 from .workflow.diagnostics import summarize_diagnostics, plot_diagnostics, plot_group_forest, create_model_summary, run_comprehensive_diagnostics
 from .workflow.prior_predictive import run_prior_predictive
 from .workflow.posterior_predictive import run_posterior_predictive
-from .workflow.cross_validation import compare_models, compare_models_stacking, compare_models_interpretation, plot_model_comparison_interpretation
+
+from .workflow.cross_validation import compare_models, compare_models_stacking, compare_models_interpretation, plot_model_comparison_interpretation, display_comparison_results
 from .workflow.sensitivity import prior_sensitivity, plot_influential
-from .workflow.iterative import run_workflow
+
 from .workflow.computation import (
-    diagnose_computational_issues, simplify_model, run_on_subset,
-    check_multimodality, reparameterize_model, add_prior_information,
-    stack_individual_chains, fake_data_simulation, plot_intermediate_quantities,
+    diagnose_computational_issues, run_on_subset,
+    check_multimodality, stack_individual_chains, fake_data_simulation, 
     comprehensive_computation_check
-)
-from .workflow.model_modification import (
-    pick_new_starting_model, replace_model_component, enrich_expand_model,
-    use_approximation, add_more_data, modify_priors, compare_inferences,
-    multiverse_analysis, model_averaging_stacking, systematic_model_modification,
-    iterative_model_refinement
 )
 
 # Utilities
-from .priors import (
-    get_default_priors, get_weakly_informative_priors, get_informative_priors, 
-    get_conservative_priors, get_data_informed_priors, validate_priors
-)
 from .plot_utils import set_plot_saving, save_current_plot, show_and_save, reset_save_counter
 from .utils import (
     validate_ordinal_data, encode_categorical_features, standardize_features,
@@ -66,14 +59,9 @@ __all__ = [
     "run_counterfactual_analysis",
     "plot_counterfactual_results",
     "partial_odds_model",
-    # PyMCOrdinal-compatible functions
-    "constrained_uniform",
-    "make_model",
-    "sample_model",
-    "create_pymcordinal_workflow",
 
     # Workflow
-    "fit_model",
+    "fit_ordinal_model",
     "summarize_diagnostics",
     "plot_diagnostics",
     "plot_group_forest",
@@ -81,44 +69,24 @@ __all__ = [
     "run_comprehensive_diagnostics",
     "run_prior_predictive",
     "run_posterior_predictive",
+
     "compare_models",
     "compare_models_stacking",
     "compare_models_interpretation",
     "plot_model_comparison_interpretation",
+    "display_comparison_results",
     "prior_sensitivity",
     "plot_influential",
-    "run_workflow",
+
     # Computational issue resolution
     "diagnose_computational_issues",
-    "simplify_model",
     "run_on_subset",
     "check_multimodality",
-    "reparameterize_model",
-    "add_prior_information",
     "stack_individual_chains",
     "fake_data_simulation",
-    "plot_intermediate_quantities",
-    "comprehensive_computation_check",
-    # Model modification
-    "pick_new_starting_model",
-    "replace_model_component",
-    "enrich_expand_model",
-    "use_approximation",
-    "add_more_data",
-    "modify_priors",
-    "compare_inferences",
-    "multiverse_analysis",
-    "model_averaging_stacking",
-    "systematic_model_modification",
-    "iterative_model_refinement",
 
+    "comprehensive_computation_check",
     # Utilities
-    "get_default_priors",
-    "get_weakly_informative_priors",
-    "get_informative_priors",
-    "get_conservative_priors",
-    "get_data_informed_priors",
-    "validate_priors",
     "set_plot_saving",
     "save_current_plot", 
     "show_and_save",

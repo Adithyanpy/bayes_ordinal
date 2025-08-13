@@ -68,15 +68,15 @@ def save_current_plot(filename: Optional[str] = None, dpi: int = 300):
     
     # Check if file already exists to avoid duplicates
     if os.path.exists(filepath):
-        print(f"⚠️  Plot already exists: {filepath}")
+        print(f"  Plot already exists: {filepath}")
         return
     
     try:
         plt.tight_layout()
         plt.savefig(filepath, dpi=dpi, bbox_inches='tight')
-        print(f"✓ Plot saved: {filepath}")
+        print(f" Plot saved: {filepath}")
     except Exception as e:
-        print(f"✗ Failed to save plot {filepath}: {e}")
+        print(f" Failed to save plot {filepath}: {e}")
 
 def show_and_save(filename: Optional[str] = None, dpi: int = 300):
     """

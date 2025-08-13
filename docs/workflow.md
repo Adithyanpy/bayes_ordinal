@@ -23,17 +23,17 @@ X_scaled, scaler = bo.standardize_features(X)
 ### 2. Prior Specification
 
 ```python
-# Default priors
-priors = bo.get_default_priors()
+# Direct prior specifications
+priors = {"coef_mu": 0.0, "coef_sigma": 2.0, "u_sigma": 1.0}
 
-# Weakly informative priors
-priors = bo.get_weakly_informative_priors()
-
-# Custom informative priors
-priors = bo.get_informative_priors(
-    coef_means=np.array([0.5, -0.3]),
-    coef_sds=np.array([1.0, 1.0])
-)
+# Custom priors for specific features
+priors = {
+    "coef_mu": 0.0,
+    "coef_sigma": 2.0,
+    "u_sigma": 1.0,
+    "gamma_mu": 0.0,
+    "gamma_sigma": 1.5
+}
 ```
 
 ### 3. Model Building

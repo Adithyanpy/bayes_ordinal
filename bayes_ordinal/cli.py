@@ -184,15 +184,75 @@ def run_analysis(config_path: Optional[str], data_path: str, output_dir: str,
     
     print(f"Building {len(models)} model(s)...")
     
-    # Run workflow
+    # Run step-by-step workflow using individual functions
     workflow_config = config.get_workflow_config()
+    results = {"models": {}, "idata": {}}
     
-    results = bo.run_workflow(
-        model_fn=models,
-        y=y_clean, X=X_scaled, K=K,
-        priors=priors,
-        config=workflow_config
-    )
+    # Build and fit models
+    for model_name, model_fn in models.items():
+        print(f"Processing model: {model_name}")
+        
+        try:
+            # Build model
+            model = model_fn(y=y_clean, X=X_scaled, K=K, priors=priors)
+            results["models"][model_name] = model
+            
+            # Prior predictive check
+            if workflow_config.get("run_prior", True):
+                print(f"  Running prior predictive check...")
+                prior_idata = bo.run_prior_predictive(
+                    model, 
+                    draws=workflow_config.get("prior_draws", 200),
+                    plot=workflow_config.get("plot_prior", True)
+                )
+                results.setdefault("prior_idata", {})[model_name] = prior_idata
+            
+            # Fit model
+            print(f"  Fitting model...")
+            idata = bo.fit_ordinal_model(
+                model,
+                draws=workflow_config.get("draws", 1000),
+                tune=workflow_config.get("tune", 1000),
+                chains=workflow_config.get("chains", 4),
+                enable_posterior_predictive=workflow_config.get("enable_posterior_predictive", True),
+                enable_log_likelihood=workflow_config.get("enable_log_likelihood", True),
+                progressbar=workflow_config.get("progressbar", True),
+                random_seed=workflow_config.get("random_seed", 42),
+                target_accept=workflow_config.get("target_accept", 0.8),
+            )
+            results["idata"][model_name] = idata
+            
+            # Posterior predictive check
+            if workflow_config.get("run_ppc", True):
+                print(f"  Running posterior predictive check...")
+                ppc = bo.run_posterior_predictive(
+                    model, idata, kind=workflow_config.get("ppc_kind", "proportions")
+                )
+                results.setdefault("ppc", {})[model_name] = ppc
+            
+            # Diagnostics
+            if workflow_config.get("run_diagnostics", True):
+                print(f"  Running diagnostics...")
+                diag_df = bo.summarize_diagnostics(idata)
+                results.setdefault("diagnostics", {})[model_name] = diag_df
+                
+        except Exception as e:
+            print(f"  Error processing {model_name}: {e}")
+            results.setdefault("errors", {})[model_name] = str(e)
+    
+    # Model comparison
+    if workflow_config.get("run_cv", True) and len(results["idata"]) > 1:
+        print("Running model comparison...")
+        try:
+            cv_results = bo.compare_models(
+                results["models"], 
+                results["idata"], 
+                ic=workflow_config.get("cv_metric", "loo")
+            )
+            results["cv"] = cv_results
+        except Exception as e:
+            print(f"Model comparison failed: {e}")
+            results.setdefault("errors", {})["cv"] = str(e)
     
     # Save results
     if config.output.save_results:

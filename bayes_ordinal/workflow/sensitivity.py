@@ -7,8 +7,8 @@ import pymc as pm
 from arviz.stats import hdi
 from typing import Callable, Sequence
 
-# ← Import your fit_model helper
-from .fitting import fit_model
+# ← Import your fit_ordinal_model helper
+from .fitting import fit_ordinal_model
 
 def prior_sensitivity(
     build_model: Callable[..., pm.Model],
@@ -59,7 +59,7 @@ def prior_sensitivity(
 
     Examples
     --------
-    >>> prior_sensitivity(cumulative_model, y, X, 4, "cut_sigma", [1, 3, 5], "alpha")
+    >>> prior_sensitivity(cumulative_model, y, X, 4, "sigma", [1, 3, 5], "cutpoints")
     """
     means, lowers, uppers = [], [], []
 
@@ -67,8 +67,8 @@ def prior_sensitivity(
         priors = {hyper_name: val}
         model = build_model(y, X, K, priors=priors)
 
-        # ─── use fit_model instead of direct pm.sample ─────────────────────
-        idata = fit_model(
+        #  use fit_ordinal_model instead of direct pm.sample 
+        idata = fit_ordinal_model(
             model,
             draws=draws,
             tune=tune,
