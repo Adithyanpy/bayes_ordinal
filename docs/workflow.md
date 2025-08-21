@@ -46,13 +46,6 @@ cumulative_model = bo.cumulative_model(
     priors=priors
 )
 
-# Partial odds model
-partial_model = bo.partial_odds_model(
-    y=y, X=X, K=K,
-    priors=priors
-)
-```
-
 ### 4. Prior Predictive Checks
 
 ```python
@@ -106,11 +99,9 @@ ppc = bo.run_posterior_predictive(
 # Compare multiple models
 models = {
     "cumulative": cumulative_model,
-    "partial": partial_model
 }
 idatas = {
     "cumulative": idata_cum,
-    "partial": idata_partial
 }
 
 comparison = bo.compare_models(models, idatas, ic="loo")
@@ -119,10 +110,9 @@ comparison = bo.compare_models(models, idatas, ic="loo")
 ### 9. Visualization
 
 ```python
-# Plot results
-bo.plot_model_comparison(idatas, ic="loo")
-bo.plot_cutpoints(idata, var_name="alpha")
-bo.plot_coefficient_effects(idata, var_name="beta", feature_names=["Age", "Income"])
+# Compare models
+comparison = bo.compare_models(idatas, ic="loo")
+print(comparison)
 ```
 
 ## Using the Complete Workflow
@@ -132,7 +122,6 @@ bo.plot_coefficient_effects(idata, var_name="beta", feature_names=["Age", "Incom
 results = bo.run_workflow(
     model_fn={
         "cumulative": bo.cumulative_model,
-        "partial": bo.partial_odds_model
     },
     y=y, X=X, K=K,
     config={

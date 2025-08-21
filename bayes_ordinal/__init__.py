@@ -6,7 +6,6 @@ A PyMC-based package for Bayesian ordinal regression with comprehensive workflow
 
 # Core models
 from .models.cumulative import cumulative_model
-from .models.partial_odds import partial_odds_model
 
 # Analysis functions
 from .analysis.counterfactual import run_counterfactual_analysis, plot_counterfactual_results
@@ -24,24 +23,19 @@ from .workflow.cross_validation import compare_models, compare_models_stacking, 
 from .workflow.sensitivity import prior_sensitivity, plot_influential
 
 from .workflow.computation import (
-    diagnose_computational_issues, run_on_subset,
+    diagnose_computational_issues,
     check_multimodality, stack_individual_chains, fake_data_simulation, 
     comprehensive_computation_check
 )
 
 # Utilities
-from .plot_utils import set_plot_saving, save_current_plot, show_and_save, reset_save_counter
+
 from .utils import (
     validate_ordinal_data, encode_categorical_features, standardize_features,
     create_group_indices, compute_category_proportions, check_convergence,
     validate_ordinal_model
 )
-from .plotting import (
-    plot_model_comparison, plot_prior_posterior, plot_forest,
-    plot_contrast, draw_causal_graph, plot_model_comparison_interpretation,
-    plot_model_structure, plot_cutpoints, plot_coefficient_effects,
-    plot_category_probabilities, plot_prior_predictive, plot_posterior_predictive
-)
+
 
 # Configuration system
 from .config import (
@@ -58,7 +52,6 @@ __all__ = [
     "cumulative_model",
     "run_counterfactual_analysis",
     "plot_counterfactual_results",
-    "partial_odds_model",
 
     # Workflow
     "fit_ordinal_model",
@@ -80,17 +73,13 @@ __all__ = [
 
     # Computational issue resolution
     "diagnose_computational_issues",
-    "run_on_subset",
     "check_multimodality",
     "stack_individual_chains",
     "fake_data_simulation",
 
     "comprehensive_computation_check",
     # Utilities
-    "set_plot_saving",
-    "save_current_plot", 
-    "show_and_save",
-    "reset_save_counter",
+
     "validate_ordinal_data",
     "encode_categorical_features",
     "standardize_features",
@@ -99,20 +88,7 @@ __all__ = [
     "check_convergence",
     "validate_ordinal_model",
 
-    # Plotting (standalone functions)
-    "plot_model_comparison",
-    "plot_prior_posterior",
-    "plot_forest",
-    "plot_contrast",
-    "draw_causal_graph",
-    "plot_model_structure",
-    "plot_cutpoints",
-    "plot_coefficient_effects",
-    "plot_category_probabilities",
-    # Plotting (delegations to workflow functions)
-    "plot_prior_predictive",  # Delegates to run_prior_predictive()
-    "plot_posterior_predictive",  # Delegates to run_posterior_predictive()
-    "plot_model_comparison_interpretation",  # Delegates to workflow function
+
 
     # Configuration
     "Config",

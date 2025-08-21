@@ -173,13 +173,10 @@ def run_analysis(config_path: Optional[str], data_path: str, output_dir: str,
     models = {}
     if config.model.model_type == "cumulative":
         models["cumulative"] = bo.cumulative_model
-    elif config.model.model_type == "partial_odds":
-        models["partial_odds"] = bo.partial_odds_model
     else:
-        # Run both models for comparison
+        # Run cumulative model
         models = {
-            "cumulative": bo.cumulative_model,
-            "partial_odds": bo.partial_odds_model
+            "cumulative": bo.cumulative_model
         }
     
     print(f"Building {len(models)} model(s)...")

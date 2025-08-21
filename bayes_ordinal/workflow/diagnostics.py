@@ -154,17 +154,15 @@ def run_comprehensive_diagnostics(
     Returns
     -------
     dict
-        Comprehensive diagnostic results including convergence status.
+        Comprehensive diagnostic results.
         
     Examples
     --------
     >>> results = run_comprehensive_diagnostics(idata, model_name="logit_model")
-    >>> print(f"Model converged: {results['converged']}")
     """
     
     results = {
         "model_name": model_name,
-        "converged": False,
         "summary": None,
         "recommendations": []
     }
@@ -181,15 +179,12 @@ def run_comprehensive_diagnostics(
                 rhat_values = summary_df["r_hat"].dropna()
                 if len(rhat_values) > 0:
                     max_rhat = rhat_values.max()
-                    results["converged"] = max_rhat < 1.01
                     results["max_rhat"] = max_rhat
                     print(f"  Max R-hat: {max_rhat:.3f}")
                 else:
-                    results["converged"] = False
                     results["max_rhat"] = None
                     print("  No valid R-hat values found")
             else:
-                results["converged"] = False
                 results["max_rhat"] = None
                 print("  R-hat column not found in summary")
             
@@ -213,7 +208,6 @@ def run_comprehensive_diagnostics(
             print(f"  R-hat column exists: {'r_hat' in summary_df.columns}")
             if 'r_hat' in summary_df.columns:
                 print(f"  R-hat values: {summary_df['r_hat'].values}")
-            print(f"  Converged: {results['converged']}")
             if results["recommendations"]:
                 print(f"  Recommendations: {', '.join(results['recommendations'])}")
                 
@@ -317,7 +311,6 @@ def plot_diagnostics(
         except Exception as e:
             print(f" Autocorrelation plots failed: {e}")
     
-    print(" Diagnostic plots completed")
 
 def plot_group_forest(
     idata: az.InferenceData,
@@ -382,7 +375,6 @@ def create_model_summary(
     Examples
     --------
     >>> summary = create_model_summary(idata, model_name="logit_model")
-    >>> print(f"Model converged: {summary['diagnostics']['converged']}")
     """
     summary = {
         "model_name": model_name,
@@ -406,7 +398,6 @@ def create_model_summary(
         "max_rhat": diag_df["r_hat"].max() if "r_hat" in diag_df else None,
         "min_ess": diag_df["ess_bulk"].min() if "ess_bulk" in diag_df else None,
         "n_divergences": diag_df["n_divergences"].sum() if "n_divergences" in diag_df else 0,
-        "converged": all(diag_df["r_hat"] < 1.01) if "r_hat" in diag_df else False
     }
     
     # Parameter summary
@@ -429,8 +420,5 @@ def create_model_summary(
     
     if summary["diagnostics"]["n_divergences"] > 0:
         summary["recommendations"].append("Check for model specification issues or use different initialization")
-    
-    if not summary["diagnostics"]["converged"]:
-        summary["recommendations"].append("Model may not have converged - check diagnostics carefully")
     
     return summary

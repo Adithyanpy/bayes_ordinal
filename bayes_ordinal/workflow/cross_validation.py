@@ -14,18 +14,11 @@ import numpy as np
 
 def _check_log_likelihood(idata: az.InferenceData, name: str) -> bool:
     """Check if log likelihood is available in InferenceData."""
-    has_ll = ("log_likelihood" in idata or 
-               "log_likelihood" in idata.posterior_predictive or
-               "log_likelihood" in idata.sample_stats)
+    has_ll = ("log_likelihood" in idata)
     
     if has_ll:
         print(f" Log likelihood found for {name}")
-        if "log_likelihood" in idata.sample_stats:
-            print(f"  Location: sample_stats (from log_likelihood=True in pm.sample())")
-        elif "log_likelihood" in idata.posterior_predictive:
-            print(f"  Location: posterior_predictive")
-        elif "log_likelihood" in idata:
-            print(f"  Location: root level")
+        
     else:
         print(f" Log likelihood not found for {name} - LOO/WAIC will fail")
         if hasattr(idata, 'posterior') and 'log_likelihood' in idata.posterior:
@@ -174,15 +167,12 @@ def compare_models(
     if log_likelihood_issues:
         print(f"\n Log likelihood issues detected for models: {log_likelihood_issues}")
         print("To fix this, ensure your models include:")
-        print("  pm.Deterministic('log_likelihood', y_obs.log_prob(y_data))")
-        print("  where y_obs is your observed variable and y_data is the data")
-
+        print("enable_log_likelihood=True")
     # Use ArviZ comparison if possible
     if len(idatas) >= 2:
         try:
             comp = az.compare(idatas, ic=ic, scale="deviance", method="stacking")
             comp["n_bad_k"] = [results[name]["n_bad_k"] for name in comp.index]
-            print(" Advanced model comparison completed using ArviZ stacking")
             return comp
         except Exception as e:
             print(f"Could not compute model comparison: {e}")

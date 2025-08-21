@@ -6,7 +6,7 @@ A comprehensive PyMC-based package for Bayesian ordinal regression with a comple
 
 This package implements Bayesian ordinal regression models with a focus on usability and best practices. It provides:
 
-- **Multiple model types**: Cumulative (proportional odds) and partial odds models
+- **Multiple model types**: Cumulative (proportional odds) models
 - **Complete workflow**: From prior specification to model comparison
 - **Robust diagnostics**: MCMC convergence, posterior predictive checks, and sensitivity analysis
 - **Visualization tools**: Specialized plots for ordinal regression analysis
@@ -125,26 +125,15 @@ bayes-ordinal --create-config config_template.yaml
 
 ## Models
 
-### Cumulative Model (Proportional Odds)
+### Cumulative Model
 
-The cumulative model assumes proportional odds across categories:
+The cumulative model is the standard approach for ordinal regression:
 
 ```python
 model = bo.cumulative_model(
     y=y, X=X, K=4,
     link="logit",  # or "probit", "cloglog"
-    priors={"coef_mu": 0.0, "coef_sigma": 2.0, "u_sigma": 1.0}
-)
-```
-
-### Partial Odds Model
-
-The partial odds model allows effects to vary by category:
-
-```python
-model = bo.partial_odds_model(
-    y=y, X=X, K=4,
-    priors={"coef_mu": 0.0, "coef_sigma": 2.0, "u_sigma": 1.0}
+    priors={"coef_mu": 0.0, "coef_sigma": 2.0}
 )
 ```
 
@@ -208,8 +197,8 @@ ppc = bo.run_posterior_predictive(
 
 ```python
 comparison = bo.compare_models(
-    {"cum": model1, "partial": model2},
-    {"cum": idata1, "partial": idata2},
+    {"cumulative": model1},
+    {"cumulative": idata1},
     ic="loo"
 )
 ```
@@ -235,9 +224,8 @@ bo.plot_cutpoints(idata, var_name="alpha")
 ### Model Comparison
 
 ```python
-bo.plot_model_comparison(
-    {"cumulative": idata1, "partial": idata2},
-    ic="loo"
+bo.compare_models(
+    {"cumulative": idata1}
 )
 ```
 
@@ -306,8 +294,7 @@ y_clean, X_clean, K = bo.validate_ordinal_data(y, X, K)
 
 # 3. Build and compare models
 models = {
-    "cumulative": bo.cumulative_model(y=y_clean, X=X_clean, K=K),
-    "partial": bo.partial_odds_model(y=y_clean, X=X_clean, K=K)
+    "cumulative": bo.cumulative_model(y=y_clean, X=X_clean, K=K)
 }
 
 # 4. Fit models

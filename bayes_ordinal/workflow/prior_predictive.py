@@ -2,7 +2,7 @@ import numpy as np
 import arviz as az
 import pymc as pm
 import matplotlib.pyplot as plt
-from ..plot_utils import show_and_save
+
 
 def run_prior_predictive(
     model: pm.Model,
@@ -353,7 +353,7 @@ def _plot_prior_predictive(idata: az.InferenceData, y_obs: np.ndarray = None, dr
             axes[i].set_visible(False)
         
         plt.tight_layout()
-        show_and_save("prior_predictive_distribution")
+        plt.show()
         
         print(" Prior predictive plots generated successfully")
             
@@ -454,15 +454,7 @@ def _plot_observed_data(y_obs, K):
     plt.legend()
     plt.grid(True, alpha=0.3)
 
-def _plot_observed_comparison(y_obs, y_data, K):
-    """Plot observed data for comparison (legacy function)."""
-    plt.hist(y_obs, bins=range(K+1), alpha=0.7, edgecolor='black',
-            label="Observed", color='lightcoral')
-    plt.xlabel("Ordinal Category")
-    plt.ylabel("Frequency")
-    plt.title("Observed vs Prior Predictive")
-    plt.legend()
-    plt.grid(True, alpha=0.3)
+
 
 def _plot_category_counts_distribution(y_data, K):
     """Plot distribution of category counts per sample."""

@@ -10,7 +10,7 @@ from .cross_validation import compare_models, compare_models_stacking, compare_m
 from .sensitivity import prior_sensitivity, plot_influential
 
 from .computation import (
-    diagnose_computational_issues, run_on_subset,
+    diagnose_computational_issues,
     check_multimodality, stack_individual_chains, fake_data_simulation, 
     comprehensive_computation_check
 )
@@ -30,7 +30,6 @@ __all__ = [
 
     # Computational issue resolution
     "diagnose_computational_issues",
-    "run_on_subset",
     "check_multimodality",
     "stack_individual_chains",
     "fake_data_simulation",

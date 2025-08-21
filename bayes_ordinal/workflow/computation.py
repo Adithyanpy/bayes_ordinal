@@ -109,71 +109,6 @@ def diagnose_computational_issues(idata: az.InferenceData) -> Dict[str, Any]:
     return issues
 
 
-def run_on_subset(model: pm.Model, y: np.ndarray, X: np.ndarray, 
-                  subset_size: int = 100, random_state: int = 42) -> az.InferenceData:
-    """
-    Run model on a subset of data to test computational issues.
-    
-    Parameters
-    ----------
-    model : pm.Model
-        Model to test
-    y : np.ndarray
-        Response variable
-    X : np.ndarray
-        Feature matrix
-    subset_size : int
-        Size of subset to use
-    random_state : int
-        Random seed for subset selection
-        
-    Returns
-    -------
-    az.InferenceData
-        Inference data from subset analysis
-    """
-    np.random.seed(random_state)
-    
-    # Select random subset
-    n_samples = len(y)
-    if subset_size >= n_samples:
-        subset_size = n_samples // 2
-    
-    indices = np.random.choice(n_samples, subset_size, replace=False)
-    y_subset = y[indices]
-    X_subset = X[indices]
-    
-    # Rebuild model with subset data
-    with model:
-        # Try to find and update observed variables dynamically
-        try:
-            # Look for common observed variable names
-            for var_name in ['y_obs', 'y', 'response', 'target']:
-                if hasattr(model, var_name) and hasattr(getattr(model, var_name), 'observations'):
-                    setattr(getattr(model, var_name), 'observations', y_subset)
-                    break
-            else:
-                # If no standard names found, try to update the first observed variable
-                observed_vars = [var for var in model.vars if hasattr(var, 'observations')]
-                if observed_vars:
-                    observed_vars[0].observations = y_subset
-                else:
-                    warnings.warn("Could not find observed variables to update in subset model")
-        except Exception as e:
-            warnings.warn(f"Could not update observed variables: {e}")
-    
-    # Fit simplified model
-    with model:
-        idata = pm.sample(
-            draws=500,
-            tune=250,
-            chains=2,
-            return_inferencedata=True
-        )
-    
-    return idata
-
-
 def check_multimodality(idata: az.InferenceData, var_names: Optional[List[str]] = None) -> Dict[str, Any]:
     """
     Check for multimodality in posterior distributions.
@@ -232,9 +167,8 @@ def check_multimodality(idata: az.InferenceData, var_names: Optional[List[str]] 
     # Summary
     if multimodal_count > 0:
         print(f"\n  {multimodal_count} variables show multimodality")
-        print("   Consider reparameterization or different initialization")
     else:
-        print("\n All variables are unimodal - good!")
+        print("\n All variables are unimodal")
     
     return multimodality_results
 
@@ -312,7 +246,7 @@ def fake_data_simulation(model: pm.Model, n_simulations: int = 10) -> Dict[str, 
     dict
         Simulation results
     """
-    print(f"🧪 Running fake data simulation ({n_simulations} simulations)...")
+    print(f" Running fake data simulation ({n_simulations} simulations)...")
     
     simulation_results = []
     successful = 0

@@ -18,7 +18,7 @@ class ModelConfig:
     """Configuration for model specification."""
     
     # Model type
-    model_type: str = "cumulative"  # "cumulative" or "partial_odds"
+    model_type: str = "cumulative"  # "cumulative"
     
     # Link function for cumulative models
     link: str = "logit"  # "logit", "probit", "cloglog"
@@ -33,8 +33,8 @@ class ModelConfig:
     
     def __post_init__(self):
         """Validate configuration after initialization."""
-        if self.model_type not in ["cumulative", "partial_odds"]:
-            raise ValueError(f"model_type must be 'cumulative' or 'partial_odds', got {self.model_type}")
+        if self.model_type not in ["cumulative"]:
+            raise ValueError(f"model_type must be 'cumulative', got {self.model_type}")
         
         if self.model_type == "cumulative" and self.link not in ["logit", "probit", "cloglog"]:
             raise ValueError(f"link must be 'logit', 'probit', or 'cloglog', got {self.link}")
@@ -57,10 +57,6 @@ class PriorConfig:
     
     # Group-level priors (for hierarchical models)
     u_sigma: float = 1.0
-    
-    # Gamma priors (for partial odds models)
-    gamma_mu: Union[float, np.ndarray] = 0.0
-    gamma_sigma: Union[float, np.ndarray] = 5.0
     
     # Custom prior specification
     custom_priors: Dict[str, Any] = field(default_factory=dict)
@@ -266,8 +262,6 @@ class Config:
                 'cut_mu': self.priors.cut_mu,
                 'cut_sigma': self.priors.cut_sigma,
                 'u_sigma': self.priors.u_sigma,
-                'gamma_mu': self.priors.gamma_mu,
-                'gamma_sigma': self.priors.gamma_sigma,
                 'custom_priors': self.priors.custom_priors
             },
             'sampling': {

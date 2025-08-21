@@ -28,8 +28,8 @@ def run_counterfactual_analysis(
     Parameters
     ----------
     model : pm.Model
-        The fitted ordinal model (cumulative, partial odds, etc.)
-    idata : az.InferenceData  
+        The fitted ordinal model (cumulative)
+    idata : az.InferenceData
         Posterior samples from the model
     scenarios : Dict[str, Dict[str, int]]
         Dictionary mapping scenario names to feature values.
