@@ -112,11 +112,9 @@ def _assess_model_complexity(model: pm.Model) -> Dict[str, Any]:
 
 def _determine_best_model(comparison_df: pd.DataFrame, ic: str) -> str:
     """Determine the best model based on information criterion."""
-    if ic in ["loo", "waic"]:
-        best_idx = np.argmin(comparison_df[f'elpd_{ic}'])  # Lower is better for LOO/WAIC
-    else:
-        best_idx = np.argmax(comparison_df[f'elpd_{ic}'])  # Higher is better for other metrics
-    return comparison_df.index[best_idx]
+    # For ELPD scale (log scale): larger values are better
+    # Both ArviZ comparison (scale="log") and fallback use ELPD values
+    return comparison_df[f'elpd_{ic}'].idxmax()
 
 def _compute_ic_metrics(idata: az.InferenceData, ic: str, reffuge_thresh: float) -> Dict[str, Any]:
     """Compute information criterion metrics for a single model."""
@@ -171,7 +169,7 @@ def compare_models(
     # Use ArviZ comparison if possible
     if len(idatas) >= 2:
         try:
-            comp = az.compare(idatas, ic=ic, scale="deviance", method="stacking")
+            comp = az.compare(idatas, ic=ic, scale="log", method="stacking")
             comp["n_bad_k"] = [results[name]["n_bad_k"] for name in comp.index]
             return comp
         except Exception as e:
@@ -540,7 +538,6 @@ def plot_model_comparison_interpretation(
     
     # Print interpretation summary
     print("\n" + "="*60)
-    print("MCELREATH-STYLE MODEL COMPARISON SUMMARY")
     print("="*60)
     print(f"Best Model: {comparison_results['best_model']}")
     

@@ -9,6 +9,7 @@ import numpy as np
 from typing import Dict, Any, Tuple
 import pymc as pm
 import arviz as az
+from scipy.stats import norm
 
 
 def run_counterfactual_analysis(
@@ -223,39 +224,50 @@ def _run_counterfactual_without_data_containers(
         # eta shape: (chains, draws, 1)
         eta = np.einsum('ijk,lk->ijl', beta_samples, scenario_X)
         
-        # For each posterior sample, compute category probabilities
-        all_predictions = []
+        # Detect link function from model
+        is_probit = getattr(model, "link", "logit") == "probit"
+        print(f"  Link function detected: {'probit' if is_probit else 'logit'}")
         
-        for chain in range(beta_samples.shape[0]):
-            for draw in range(beta_samples.shape[1]):
-                # Get current beta and cutpoints
-                beta_current = beta_samples[chain, draw, :]
-                cutpoints_current = cutpoint_samples[chain, draw, :]
-                
-                # Compute linear predictor
-                eta_current = np.dot(scenario_X, beta_current)[0]
-                
-                # Compute category probabilities using logistic function
-                # P(Y = k) = P(Y ≤ k) - P(Y ≤ k-1)
-                probs = np.zeros(len(cutpoints_current) + 1)
-                
-                # P(Y ≤ k) = 1 / (1 + exp(-(cutpoints[k] - eta)))
-                for k in range(len(cutpoints_current)):
-                    if k == 0:
-                        # P(Y ≤ 0) = 1 / (1 + exp(-(cutpoints[0] - eta)))
-                        probs[0] = 1 / (1 + np.exp(-(cutpoints_current[0] - eta_current)))
-                    else:
-                        # P(Y ≤ k) = 1 / (1 + exp(-(cutpoints_current[k] - eta_current)))
-                        prob_k = 1 / (1 + np.exp(-(cutpoints_current[k] - eta_current)))
-                        # P(Y = k) = P(Y ≤ k-1) - P(Y ≤ k)
-                        probs[k] = prob_k - np.sum(probs[:k])
-                
-                # P(Y = K-1) = 1 - sum of all previous probabilities
-                probs[-1] = 1 - np.sum(probs[:-1])
-                
-                # Sample from categorical distribution
-                category = np.random.choice(len(probs), p=probs)
-                all_predictions.append(category)
+        # Define link function
+        def F(z):
+            return norm.cdf(z) if is_probit else 1.0 / (1.0 + np.exp(-z))
+        
+        # Vectorized computation for all posterior samples
+        # Reshape samples for vectorized operations
+        B = beta_samples.reshape(-1, beta_samples.shape[-1])   # (S, p) where S = chains * draws
+        C = cutpoint_samples.reshape(-1, cutpoint_samples.shape[-1])  # (S, K-1)
+        
+        print(f"  Beta samples shape: {beta_samples.shape} -> {B.shape}")
+        print(f"  Cutpoint samples shape: {cutpoint_samples.shape} -> {C.shape}")
+        
+        # Compute linear predictor for all samples at once
+        eta = B @ scenario_X.ravel()  # (S,)
+        print(f"  Linear predictor shape: {eta.shape}")
+        
+        # Compute cumulative probabilities using vectorized link function
+        Fvals = F(C - eta[:, None])  # (S, K-1)
+        print(f"  CDF values shape: {Fvals.shape}")
+        
+        # Convert to category probabilities: prepend 0, append 1, then diff
+        cdf = np.concatenate([
+            np.zeros((len(eta), 1)), 
+            Fvals, 
+            np.ones((len(eta), 1))
+        ], axis=1)  # (S, K+1)
+        
+        probs = np.diff(cdf, axis=1)  # (S, K)
+        print(f"  Category probabilities shape: {probs.shape}")
+        
+        # Sample categories from multinomial distribution for each row
+        all_predictions = []
+        for i in range(probs.shape[0]):
+            # Ensure probabilities are valid (non-negative and sum to 1)
+            prob_row = np.maximum(probs[i], 0)
+            prob_row = prob_row / prob_row.sum()
+            category = np.random.choice(probs.shape[1], p=prob_row)
+            all_predictions.append(category)
+        
+        print(f"  Generated {len(all_predictions)} predictions for {scenario_name}")
         
         # Store results
         results["predictions"][scenario_name] = np.array(all_predictions)
@@ -273,7 +285,11 @@ def _run_counterfactual_without_data_containers(
             "median": float(np.median(all_predictions)),
             "mode": int(unique_vals[np.argmax(counts)])
         }
+        
+        print(f"  Stored results for {scenario_name}: mean={results['summary'][scenario_name]['mean']:.3f}")
     
+    print(f"Final results structure: {list(results.keys())}")
+    print(f"Scenarios processed: {list(results['summary'].keys())}")
     return results
 
 

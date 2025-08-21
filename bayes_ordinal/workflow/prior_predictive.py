@@ -372,9 +372,9 @@ def _plot_sample_distributions(y_data, K, draws):
             # Access data correctly based on dimensions
             if len(y_data.shape) == 3:  # (chain, draw, observations)
                 sample_data = y_data.isel(chain=0, draw=i).values.flatten()
-            elif len(y_data.shape) == 2:  # (draw, observations)
+            elif len(y_data.shape) == 2 and "draw" in y_data.dims:  # (draw, observations)
                 sample_data = y_data.isel(draw=i).values.flatten()
-            else:  # (observations,)
+            else:  # 1D observations
                 sample_data = y_data.values.flatten()
             
             # Only plot if we have valid data
@@ -408,7 +408,7 @@ def _plot_mean_distribution(y_data, K):
             freq_array = np.array(freq_distributions)  # Shape: (draws, categories)
             mean_freq = np.mean(freq_array, axis=0)   # Shape: (categories,)
             
-        elif len(y_data.shape) == 2:  # (draw, observations)
+        elif len(y_data.shape) == 2 and "draw" in y_data.dims:  # (draw, observations)
             freq_distributions = []
             for draw_idx in range(y_data.shape[0]):
                 sample_data = y_data.isel(draw=draw_idx).values.flatten()
@@ -418,7 +418,7 @@ def _plot_mean_distribution(y_data, K):
             freq_array = np.array(freq_distributions)
             mean_freq = np.mean(freq_array, axis=0)
             
-        else:  # (observations,)
+        else:  # 1D observations
             sample_data = y_data.values.flatten()
             mean_freq = [np.sum(sample_data == cat) for cat in range(K)]
         
@@ -469,9 +469,9 @@ def _plot_category_counts_distribution(y_data, K):
             # Access data correctly based on dimensions
             if len(y_data.shape) == 3:  # (chain, draw, observations)
                 sample_data = y_data.isel(chain=0, draw=draw_idx).values.flatten()
-            elif len(y_data.shape) == 2:  # (draw, observations)
+            elif len(y_data.shape) == 2 and "draw" in y_data.dims:  # (draw, observations)
                 sample_data = y_data.isel(draw=draw_idx).values.flatten()
-            else:  # (observations,)
+            else:  # 1D observations
                 sample_data = y_data.values.flatten()
             
             # Only process if we have valid data
@@ -512,10 +512,10 @@ def _plot_total_observations_distribution(y_data):
             # Access data correctly based on dimensions
             if len(y_data.shape) == 3:  # (chain, draw, observations)
                 sample_data = y_data.isel(chain=0, draw=draw_idx).values.flatten()
-            elif len(y_data.shape) == 2:  # (draw, observations)
+            elif len(y_data.shape) == 2 and "draw" in y_data.dims:  # (draw, observations)
                 sample_data = y_data.isel(draw=draw_idx).values.flatten()
-            else:  # (observations,)
-                sample_data = y_data.isel(draw=draw_idx).values.flatten()
+            else:  # 1D observations
+                sample_data = y_data.values.flatten()
             
             # Only process if we have valid data
             if len(sample_data) > 0:
@@ -545,9 +545,9 @@ def _plot_category_proportions(y_data, K):
             # Access data correctly based on dimensions
             if len(y_data.shape) == 3:  # (chain, draw, observations)
                 sample_data = y_data.isel(chain=0, draw=draw_idx).values.flatten()
-            elif len(y_data.shape) == 2:  # (draw, observations)
+            elif len(y_data.shape) == 2 and "draw" in y_data.dims:  # (draw, observations)
                 sample_data = y_data.isel(draw_idx).values.flatten()
-            else:  # (observations,)
+            else:  # 1D observations
                 sample_data = y_data.values.flatten()
             
             # Only process if we have valid data

@@ -136,38 +136,47 @@ def cumulative_model(y, X, K, link="logit", priors=None, model_name="cumulative_
     y_data = np.array(y) - np.min(y)
     
     with pm.Model(name=model_name) as model:
-        # Generic coefficient structure
+        # Add coordinates for better ArviZ output
+        coords = {
+            "obs": np.arange(len(y_data)),
+            "feature": feature_names or [f"x{i}" for i in range(X.shape[1])],
+            "cut": np.arange(K-1),
+        }
+        if group_idx is not None and n_groups is not None:
+            coords["group"] = np.arange(n_groups)
+        
+        model.add_coords(coords)
+        
+        # Generic coefficient structure with dims
         n_features = X.shape[1]
         beta = pm.Normal("beta", 
                          mu=priors.get("beta", [0, 1])[0], 
                          sigma=priors.get("beta", [0, 1])[1], 
-                         size=n_features)
+                         dims=("feature",))
         
         # Create pm.Data variable for the entire feature matrix (like OC does)
-        X_data = pm.Data("X", X)
+        X_data = pm.Data("X", X, dims=("obs", "feature"))
         
         # Linear predictor using pm.Data variable (like OC)
-        eta = pm.math.dot(X_data, beta)
+        eta = pm.Deterministic("eta", pm.math.dot(X_data, beta), dims=("obs",))
         
         # Add hierarchical structure if specified
         if group_idx is not None and n_groups is not None:
             u_sigma = priors.get("u_sigma", 1.0)
-            u = pm.Normal("u", mu=0, sigma=u_sigma, shape=n_groups)
-            eta = eta + u[group_idx]
+            u = pm.Normal("u", mu=0, sigma=u_sigma, dims=("group",))
+            eta = pm.Deterministic("eta", eta + u[group_idx], dims=("obs",))
         
         # Cutpoints implementation
         constrained_uniform = priors.get("constrained_uniform", False)
         
         if constrained_uniform:
-            # Approach 1: Constrained Dirichlet
-            cuts_unknown = pm.Dirichlet("cuts_unknown", a=np.ones(K - 2))
-            cutpoints = pm.Deterministic(
-                "cutpoints",
-                pt.concatenate([
-                    pt.zeros(1),  # First cutpoint fixed at 0
-                    pt.extra_ops.cumsum(cuts_unknown) * K
-                ])
-            )
+            # Approach 1: Experimental "spacing" parameter approach
+            # WARNING: This approach is experimental and may cause identifiability issues
+            # Consider using the default Normal+ordered transform instead
+            delta = pm.HalfNormal("delta", sigma=1.0, shape=K-1)  # positive spacings
+            raw = pm.Deterministic("cut_raw", pt.cumsum(delta))    # increasing positive
+            loc = pm.Normal("cut_loc", 0, 2.5)                     # free location
+            cutpoints = pm.Deterministic("cutpoints", loc + raw - raw.mean())  # center
         else:
             if prior_type == "fixed_sigma":
                 # Approach 2a: Fixed sigma (like OC)
@@ -176,7 +185,7 @@ def cumulative_model(y, X, K, link="logit", priors=None, model_name="cumulative_
                     mu=priors.get("mu", np.zeros(K-1)),
                     sigma=priors.get("sigma", 1.0),  # Fixed sigma value
                     transform=pm.distributions.transforms.ordered,
-                    shape=K-1
+                    dims=("cut",)
                 )
             else:
                 # Approach 2b: Exponential sigma (current approach)
@@ -186,19 +195,22 @@ def cumulative_model(y, X, K, link="logit", priors=None, model_name="cumulative_
                     mu=priors.get("mu", np.linspace(0, K, K-1)),
                     sigma=sigma,  # Random sigma from Exponential
                     transform=pm.distributions.transforms.ordered,
-                    shape=K-1
+                    dims=("cut",)
                 )
         
         # Likelihood
         if link.lower() == "logit":
-            pm.OrderedLogistic("y", cutpoints=cutpoints, eta=eta, observed=y_data)
+            pm.OrderedLogistic("y", cutpoints=cutpoints, eta=eta, observed=y_data, dims=("obs",))
         elif link.lower() == "probit":
-            pm.OrderedProbit("y", cutpoints=cutpoints, eta=eta, observed=y_data)
+            pm.OrderedProbit("y", cutpoints=cutpoints, eta=eta, observed=y_data, dims=("obs",))
         else:
             raise ValueError("link must be 'logit' or 'probit'")
         
         # Store feature names for reference if provided
         if feature_names is not None:
             model.feature_names = feature_names
+        
+        # Store link function for other modules to access
+        model.link = link.lower()
     
     return model
