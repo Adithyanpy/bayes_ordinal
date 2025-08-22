@@ -158,13 +158,15 @@ def cumulative_model(y, X, K, link="logit", priors=None, model_name="cumulative_
         X_data = pm.Data("X", X, dims=("obs", "feature"))
         
         # Linear predictor using pm.Data variable (like OC)
-        eta = pm.Deterministic("eta", pm.math.dot(X_data, beta), dims=("obs",))
+        eta_base = pm.math.dot(X_data, beta)
         
         # Add hierarchical structure if specified
         if group_idx is not None and n_groups is not None:
             u_sigma = priors.get("u_sigma", 1.0)
             u = pm.Normal("u", mu=0, sigma=u_sigma, dims=("group",))
-            eta = pm.Deterministic("eta", eta + u[group_idx], dims=("obs",))
+            eta = pm.Deterministic("eta", eta_base + u[group_idx], dims=("obs",))
+        else:
+            eta = pm.Deterministic("eta", eta_base, dims=("obs",))
         
         # Cutpoints implementation
         constrained_uniform = priors.get("constrained_uniform", False)
