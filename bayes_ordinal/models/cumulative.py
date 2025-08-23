@@ -18,6 +18,9 @@ def cumulative_model(y, X, K, link="logit", priors=None, model_name="cumulative_
     
     This implements two approaches for cutpoints:
     1. Constrained approach: Using Dirichlet for cutpoints (better for constrained outcome space)
+       - Uses Dirichlet distribution to ensure proportions sum to 1
+       - Applies cumulative sum to create ordered cutpoints
+       - First cutpoint is fixed at 0, remaining are cumulative sums of Dirichlet draws
     2. Flexible approach: Using Normal with univariate_ordered transform
     
     Parameters:
@@ -59,6 +62,8 @@ def cumulative_model(y, X, K, link="logit", priors=None, model_name="cumulative_
     The model features:
     - Generic beta coefficients with size parameter
     - Support for both constrained (Dirichlet) and flexible (Normal) cutpoint approaches
+      * Constrained: Uses Dirichlet distribution with cumulative sum transformation
+      * Flexible: Uses Normal distribution with ordered transform
     - Hierarchical structure when group_idx and n_groups are provided
     - Automatic 0-based indexing for ordinal categories
     - Two prior approaches: fixed_sigma (fixed sigma) and exponential_sigma (random sigma)
@@ -172,13 +177,17 @@ def cumulative_model(y, X, K, link="logit", priors=None, model_name="cumulative_
         constrained_uniform = priors.get("constrained_uniform", False)
         
         if constrained_uniform:
-            # Approach 1: Experimental "spacing" parameter approach
-            # WARNING: This approach is experimental and may cause identifiability issues
-            # Consider using the default Normal+ordered transform instead
-            delta = pm.HalfNormal("delta", sigma=1.0, shape=K-1)  # positive spacings
-            raw = pm.Deterministic("cut_raw", pt.cumsum(delta))    # increasing positive
-            loc = pm.Normal("cut_loc", 0, 2.5)                     # free location
-            cutpoints = pm.Deterministic("cutpoints", loc + raw - raw.mean())  # center
+            # Approach 1: Constrained Dirichlet approach (standard method)
+            # This ensures proper ordering and constraint properties for ordinal cutpoints
+            # The Dirichlet distribution ensures proportions sum to 1, creating ordered cutpoints
+            cuts_unknown = pm.Dirichlet("cuts_unknown", a=np.ones(K-2))
+            cutpoints = pm.Deterministic(
+                "cutpoints",
+                pt.concatenate([
+                    np.zeros(1),  # First cutpoint at 0
+                    pt.cumsum(cuts_unknown)  # Cumulative sums for remaining cutpoints
+                ])
+            )
         else:
             if prior_type == "fixed_sigma":
                 # Approach 2a: Fixed sigma (like OC)
