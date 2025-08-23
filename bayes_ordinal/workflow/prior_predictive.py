@@ -546,7 +546,7 @@ def _plot_category_proportions(y_data, K):
             if len(y_data.shape) == 3:  # (chain, draw, observations)
                 sample_data = y_data.isel(chain=0, draw=draw_idx).values.flatten()
             elif len(y_data.shape) == 2 and "draw" in y_data.dims:  # (draw, observations)
-                sample_data = y_data.isel(draw_idx).values.flatten()
+                sample_data = y_data.isel(draw=draw_idx).values.flatten()
             else:  # 1D observations
                 sample_data = y_data.values.flatten()
             

@@ -8,7 +8,7 @@ def run_posterior_predictive(
     model,
     idata: az.InferenceData,
     var_name: str = "y",  
-    kind: str = "proportions",
+    kind: str = "hist",
     figsize=(6, 4),
 ):
     """
@@ -38,7 +38,7 @@ def run_posterior_predictive(
 
     Examples
     --------
-    >>> ppc = run_posterior_predictive(model, idata, kind="proportions")
+    >>> ppc = run_posterior_predictive(model, idata, kind="hist")
     >>> ppc.posterior_predictive["y"].shape
     """
     # 1) sample posterior predictive

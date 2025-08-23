@@ -82,7 +82,7 @@ def summarize_diagnostics(
 
     # 2) Count divergences per variable via sample_stats (if available)
     try:
-        if "sample_stats" in idata and "diverging" in idata.sample_stats:
+        if hasattr(idata, "sample_stats") and hasattr(idata.sample_stats, "diverging"):
             divergences = idata.sample_stats["diverging"].sum(dim=["chain", "draw"]).item()
             summary_df["n_divergences"] = divergences
         else:
@@ -93,7 +93,7 @@ def summarize_diagnostics(
 
     # 3) Max energy change from sample_stats (if available)
     try:
-        if "sample_stats" in idata and "energy" in idata.sample_stats:
+        if hasattr(idata, "sample_stats") and hasattr(idata.sample_stats, "energy"):
             energy_diff = idata.sample_stats["energy"].diff(dim="draw")
             max_energy = float(np.max(np.abs(energy_diff.values)))
             summary_df["max_energy_diff"] = max_energy
@@ -105,13 +105,13 @@ def summarize_diagnostics(
 
     # 4) Check for log likelihood availability (needed for LOO/WAIC)
     try:
-        if "log_likelihood" in idata:
+        if hasattr(idata, "log_likelihood"):
             print(" Log likelihood available for LOO/WAIC calculations")
             summary_df["log_likelihood_available"] = True
-        elif "log_likelihood" in idata.posterior_predictive:
+        elif hasattr(idata, "posterior_predictive") and hasattr(idata.posterior_predictive, "log_likelihood"):
             print(" Log likelihood available in posterior predictive for LOO/WAIC calculations")
             summary_df["log_likelihood_available"] = True
-        elif "log_likelihood" in idata.sample_stats:
+        elif hasattr(idata, "sample_stats") and hasattr(idata.sample_stats, "log_likelihood"):
             print(" Log likelihood available in sample_stats for LOO/WAIC calculations")
             summary_df["log_likelihood_available"] = True
         else:
@@ -275,7 +275,7 @@ def plot_diagnostics(
     print("Creating diagnostic plots...")
     
     # 1. Energy plot (most important for convergence)
-    if include_energy and "sample_stats" in idata and "energy" in idata.sample_stats:
+    if include_energy and hasattr(idata, "sample_stats") and hasattr(idata.sample_stats, "energy"):
         try:
             print(" Creating energy plot...")
             az.plot_energy(idata)
@@ -389,7 +389,7 @@ def create_model_summary(
         "n_chains": idata.posterior.dims.get("chain", 0),
         "n_draws": idata.posterior.dims.get("draw", 0),
         "n_parameters": len(idata.posterior.data_vars),
-        "sampling_time": getattr(idata, "sample_stats", {}).get("sampling_time", None)
+        "sampling_time": getattr(getattr(idata, "sample_stats", None), "attrs", {}).get("sampling_time", None)
     }
     
     # Diagnostics

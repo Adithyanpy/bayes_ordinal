@@ -12,7 +12,7 @@ This package provides a complete Bayesian workflow for ordinal regression analys
 - **Model Comparison**: Cross-validation with LOO/WAIC, stacking, and interpretation tools
 - **Hierarchical Support**: Group-level varying intercepts and random effects
 - **Counterfactual Analysis**: Scenario-based predictions and causal inference
-- **Configuration System**: Flexible configuration management for different analysis needs
+
 
 ## Installation
 
@@ -59,29 +59,7 @@ summary = bo.create_model_summary(idata)
 ppc = bo.run_posterior_predictive(model, idata)
 ```
 
-### Advanced Workflow with Configuration
 
-```python
-from bayes_ordinal.config import get_production_config, Config
-
-# Use preset configurations
-config = get_production_config()
-config.model.model_type = "cumulative"
-config.model.link = "logit"
-config.sampling.draws = 2000
-
-# Or create custom configuration
-custom_config = Config()
-custom_config.name = "my_analysis"
-custom_config.sampling.draws = 2000
-custom_config.workflow.run_sensitivity_analysis = True
-
-# Build and run analysis
-model = bo.cumulative_model(y=y, X=X, K=K)
-prior_idata = bo.run_prior_predictive(model, draws=200)
-idata = bo.fit_ordinal_model(model, draws=custom_config.sampling.draws)
-ppc = bo.run_posterior_predictive(model, idata)
-```
 
 ## Core Models
 
@@ -161,7 +139,7 @@ model_summary = bo.create_model_summary(idata)
 # Run posterior predictive checks
 ppc = bo.run_posterior_predictive(
     model, idata,
-    kind="proportions"  # "proportions", "hist", "ecdf"
+    kind="hist"  # "hist", "ecdf"
 )
 ```
 
@@ -267,30 +245,9 @@ results = bo.run_counterfactual_analysis(
 bo.plot_counterfactual_results(results)
 ```
 
-## Configuration System
 
-The package provides a flexible configuration system:
 
-```python
-from bayes_ordinal.config import (
-    Config, ModelConfig, PriorConfig, SamplingConfig, 
-    WorkflowConfig, DataConfig, OutputConfig,
-    get_default_config, get_quick_test_config, 
-    get_production_config, get_hierarchical_config
-)
 
-# Preset configurations
-config = get_production_config()        # Production settings
-config = get_quick_test_config()        # Quick testing
-config = get_hierarchical_config()      # Hierarchical models
-
-# Custom configuration
-config = Config()
-config.model.model_type = "cumulative"
-config.model.link = "logit"
-config.sampling.draws = 2000
-config.workflow.run_sensitivity_analysis = True
-```
 
 ## Complete Analysis Example
 
@@ -358,7 +315,7 @@ for name, idata in idatas.items():
 - **SciPy** >= 1.10 - Scientific computing
 - **Matplotlib** >= 3.6 - Plotting
 - **scikit-learn** - Data preprocessing
-- **PyYAML** >= 6.0 - Configuration files
+
 - **pandas** - Data manipulation
 
 ## Contributing

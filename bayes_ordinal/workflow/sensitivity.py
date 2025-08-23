@@ -73,7 +73,6 @@ def prior_sensitivity(
             draws=draws,
             tune=tune,
             chains=chains,
-            smoke_test=False,           # full sampling run
             return_inferencedata=True,
             progressbar=False           # passed through to pm.sample
         )

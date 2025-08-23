@@ -14,16 +14,16 @@ import numpy as np
 
 def _check_log_likelihood(idata: az.InferenceData, name: str) -> bool:
     """Check if log likelihood is available in InferenceData."""
-    has_ll = ("log_likelihood" in idata)
+    has_ll = hasattr(idata, "log_likelihood")
     
     if has_ll:
         print(f" Log likelihood found for {name}")
         
     else:
         print(f" Log likelihood not found for {name} - LOO/WAIC will fail")
-        if hasattr(idata, 'posterior') and 'log_likelihood' in idata.posterior:
+        if hasattr(idata, 'posterior') and hasattr(idata.posterior, 'log_likelihood'):
             print(f"  Found log_likelihood in posterior for {name}")
-        elif hasattr(idata, 'sample_stats') and 'log_likelihood' in idata.sample_stats:
+        elif hasattr(idata, 'sample_stats') and hasattr(idata.sample_stats, 'log_likelihood'):
             print(f"  Found log_likelihood in sample_stats for {name}")
         else:
             print(f"  No log_likelihood found anywhere for {name}")

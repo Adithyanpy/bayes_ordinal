@@ -29,20 +29,16 @@ from .workflow.computation import (
 )
 
 # Utilities
-
-from .utils import (
+from .utils.data_processing import (
     validate_ordinal_data, encode_categorical_features, standardize_features,
-    create_group_indices, compute_category_proportions, check_convergence,
-    validate_ordinal_model
+    create_group_indices, compute_category_proportions
+)
+from .utils.model_validation import (
+    check_convergence, validate_ordinal_model
 )
 
 
-# Configuration system
-from .config import (
-    Config, ModelConfig, PriorConfig, SamplingConfig, WorkflowConfig, 
-    DataConfig, OutputConfig, get_default_config, get_quick_test_config, 
-    get_production_config, get_hierarchical_config
-)
+
 
 # Version
 __version__ = "0.1.0"
@@ -90,16 +86,5 @@ __all__ = [
 
 
 
-    # Configuration
-    "Config",
-    "ModelConfig",
-    "PriorConfig",
-    "SamplingConfig",
-    "WorkflowConfig",
-    "DataConfig",
-    "OutputConfig",
-    "get_default_config",
-    "get_quick_test_config",
-    "get_production_config",
-    "get_hierarchical_config",
+
 ]
