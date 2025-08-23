@@ -70,7 +70,7 @@ The cumulative model implements proportional odds ordinal regression with flexib
 ```python
 model = bo.cumulative_model(
     y=y, X=X, K=4,
-    link="logit",  # "logit", "probit", "cloglog"
+    link="logit",  # "logit", "probit"
     priors={"coef_mu": 0.0, "coef_sigma": 2.5},
     prior_type="exponential_sigma",  # "fixed_sigma" or "exponential_sigma"
     feature_names=["Age", "Income", "Education"]
