@@ -34,7 +34,12 @@ def cumulative_model(y, X, K, link="logit", priors=None, model_name="cumulative_
     link : str, optional
         Link function: "logit" or "probit"
     priors : dict, optional
-        Prior specifications (if None, uses sensible defaults)
+        Prior specifications (if None, uses sensible defaults). Key parameters:
+        - "beta": [mu, sigma] for coefficients (default: [0, 1])
+        - "sigma": sigma for cutpoints (default: 1.0)
+        - "mu": means for cutpoints (default: zeros or linspace)
+        - "tau": scale parameter for HalfNormal prior on group-level variation (default: 1.0)
+        - "constrained_uniform": whether to use constrained Dirichlet approach (default: False)
     model_name : str, optional
         Name for the model
     feature_names : list, optional
@@ -56,6 +61,7 @@ def cumulative_model(y, X, K, link="logit", priors=None, model_name="cumulative_
         - y: Observed ordinal response
         - eta: Linear predictor
         - u: Group-level effects (if hierarchical)
+        - u_sigma: Group-level variation parameter (if hierarchical)
         
     Notes:
     ------
@@ -65,10 +71,12 @@ def cumulative_model(y, X, K, link="logit", priors=None, model_name="cumulative_
       * Constrained: Uses Dirichlet distribution with cumulative sum transformation
       * Flexible: Uses Normal distribution with ordered transform
     - Hierarchical structure when group_idx and n_groups are provided
+      * Group-level variation uses HalfNormal prior: u_sigma ~ HalfNormal(tau)
+      * This provides adaptive shrinkage and better uncertainty quantification
     - Automatic 0-based indexing for ordinal categories
     - Two prior approaches: fixed_sigma (fixed sigma) and exponential_sigma (random sigma)
     - Automatic probit adjustment: Prior scales are automatically adjusted for probit models
-      (coefficients, cutpoints, and group-level effects are scaled by ~0.625)
+      (coefficients, cutpoints, and group-level variation are scaled by ~0.625)
     """
     # Validate inputs
     if K < 2:
@@ -105,9 +113,9 @@ def cumulative_model(y, X, K, link="logit", priors=None, model_name="cumulative_
         if prior_type == "fixed_sigma":
             priors = {
                 "beta": [0, 1],       # [mu, sigma] for coefficients
-                "sigma": 1.0,         # Fixed sigma for cutpoints (like OC)
-                "mu": np.zeros(K-1),  # mu=0 for all cutpoints (like OC)
-                "u_sigma": 1.0,       # Group-level variation (hierarchical)
+                "sigma": 1.0,         # Fixed sigma for cutpoints
+                "mu": np.zeros(K-1),  # mu=0 for all cutpoints
+                "tau": 1.0,           # Scale parameter for HalfNormal prior on u_sigma
                 "constrained_uniform": False  # Use flexible approach by default
             }
         else:  # exponential_sigma
@@ -115,7 +123,7 @@ def cumulative_model(y, X, K, link="logit", priors=None, model_name="cumulative_
                 "beta": [0, 1],       # [mu, sigma] for coefficients
                 "sigma": 1.0,         # Exponential prior parameter
                 "mu": np.linspace(0, K, K-1),  # Default cutpoint means
-                "u_sigma": 1.0,       # Group-level variation (hierarchical)
+                "tau": 1.0,           # Scale parameter for HalfNormal prior on u_sigma
                 "constrained_uniform": False  # Use flexible approach by default
             }
     
@@ -133,9 +141,9 @@ def cumulative_model(y, X, K, link="logit", priors=None, model_name="cumulative_
         if "sigma" in priors:
             priors["sigma"] *= probit_adjustment
         
-        # Adjust group-level variation
-        if "u_sigma" in priors:
-            priors["u_sigma"] *= probit_adjustment
+        # Adjust group-level variation scale parameter
+        if "tau" in priors:
+            priors["tau"] *= probit_adjustment
     
     # Ensure y starts from 0
     y_data = np.array(y) - np.min(y)
@@ -167,7 +175,8 @@ def cumulative_model(y, X, K, link="logit", priors=None, model_name="cumulative_
         
         # Add hierarchical structure if specified
         if group_idx is not None and n_groups is not None:
-            u_sigma = priors.get("u_sigma", 1.0)
+            tau = priors.get("tau", 1.0)
+            u_sigma = pm.HalfNormal("u_sigma", sigma=tau)
             u = pm.Normal("u", mu=0, sigma=u_sigma, dims=("group",))
             eta = pm.Deterministic("eta", eta_base + u[group_idx], dims=("obs",))
         else:
