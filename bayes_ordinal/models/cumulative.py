@@ -12,7 +12,8 @@ from typing import Dict, Any, Optional
 
 
 def cumulative_model(y, X, K, link="logit", priors=None, model_name="cumulative_model", 
-                    feature_names=None, group_idx=None, n_groups=None, prior_type="fixed_sigma"):
+                    feature_names=None, group_idx=None, n_groups=None, prior_type="fixed_sigma", 
+                    auto_probit_adjustment=True):
     """
     Build a cumulative ordinal regression model.
     
@@ -51,6 +52,10 @@ def cumulative_model(y, X, K, link="logit", priors=None, model_name="cumulative_
     prior_type : str, optional
         "fixed_sigma": Fixed sigma for cutpoints (like OC documentation)
         "exponential_sigma": Random sigma from Exponential prior (current approach)
+    auto_probit_adjustment : bool, optional
+        Whether to automatically adjust prior scales for probit models (default: True).
+        Set to False when using data-informed priors like z-scores that are already
+        properly scaled for the probit link function.
     
     Returns:
     --------
@@ -76,7 +81,8 @@ def cumulative_model(y, X, K, link="logit", priors=None, model_name="cumulative_
     - Automatic 0-based indexing for ordinal categories
     - Two prior approaches: fixed_sigma (fixed sigma) and exponential_sigma (random sigma)
     - Automatic probit adjustment: Prior scales are automatically adjusted for probit models
-      (coefficients, cutpoints, and group-level variation are scaled by ~0.625)
+      (coefficients, cutpoints, and group-level variation are scaled by ~0.625).
+      This can be disabled with auto_probit_adjustment=False when using properly scaled priors.
     """
     # Validate inputs
     if K < 2:
@@ -127,10 +133,12 @@ def cumulative_model(y, X, K, link="logit", priors=None, model_name="cumulative_
                 "constrained_uniform": False  # Use flexible approach by default
             }
     
-    # Apply probit adjustment factor if using probit link
+    # Apply probit adjustment factor if using probit link and auto-adjustment is enabled
     # Probit coefficients are approximately 1.6 times smaller than logit coefficients
     # This adjustment provides more appropriate prior scales for probit models
-    if link.lower() == "probit":
+    # Note: Disable this when using data-informed priors (e.g., z-scores) that are already
+    # properly scaled for the probit link function
+    if link.lower() == "probit" and auto_probit_adjustment:
         probit_adjustment = 1.0 / 1.6  # ≈ 0.625
         
         # Adjust coefficient priors
