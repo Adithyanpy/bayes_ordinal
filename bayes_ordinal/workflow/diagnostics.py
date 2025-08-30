@@ -347,7 +347,7 @@ def plot_group_forest(
         figsize=figsize,
         kind="forestplot"
     )
-    plt.title(f"Group‐level `{var_name}` — {int(hdi_prob*100)}% CI")
+    plt.title(f"Group-level `{var_name}` - {int(hdi_prob*100)}% CI")
     plt.show()
 
 def create_model_summary(

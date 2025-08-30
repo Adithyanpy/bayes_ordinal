@@ -124,13 +124,13 @@ def _compute_ic_metrics(idata: az.InferenceData, ic: str, reffuge_thresh: float)
             ic_val = loo.elpd_loo
             ic_se = loo.se
             bad_k = (loo.pareto_k > reffuge_thresh).sum().item()
-            print(f" LOO computed successfully: {ic_val:.2f} ± {ic_se:.2f}")
+            print(f" LOO computed successfully: {ic_val:.2f} +/- {ic_se:.2f}")
         else:
             waic = az.waic(idata, pointwise=True)
             ic_val = waic.elpd_waic
             ic_se = waic.se
             bad_k = float("nan")
-            print(f" WAIC computed successfully: {ic_val:.2f} ± {ic_se:.2f}")
+            print(f" WAIC computed successfully: {ic_val:.2f} +/- {ic_se:.2f}")
         
         return {"ic": ic_val, "ic_se": ic_se, "n_bad_k": bad_k}
     except Exception as e:
@@ -389,7 +389,7 @@ def display_comparison_results(results: Dict[str, Any]) -> None:
     if "recommendations" in results and results["recommendations"]:
         print("\n RECOMMENDATIONS:")
         for rec in results["recommendations"]:
-            print(f"  • {rec}")
+            print(f"  - {rec}")
     
     print("\n" + "="*80)
 
@@ -483,9 +483,9 @@ def plot_model_comparison_interpretation(
     ax2.grid(True, alpha=0.3)
     
     # Add McElreath interpretation lines
-    ax2.axvline(-2, color='orange', linestyle='--', alpha=0.7, label='±2 (equivalent)')
+    ax2.axvline(-2, color='orange', linestyle='--', alpha=0.7, label='+/-2 (equivalent)')
     ax2.axvline(2, color='orange', linestyle='--', alpha=0.7)
-    ax2.axvline(-6, color='red', linestyle='--', alpha=0.7, label='±6 (substantial)')
+    ax2.axvline(-6, color='red', linestyle='--', alpha=0.7, label='+/-6 (substantial)')
     ax2.axvline(6, color='red', linestyle='--', alpha=0.7)
     ax2.legend()
     
@@ -553,7 +553,7 @@ def plot_model_comparison_interpretation(
     
     print("\nRecommendations:")
     for rec in comparison_results['recommendations']['model_selection']:
-        print(f"  • {rec}")
+        print(f"  - {rec}")
     
     if comparison_results['recommendations']['cautions']:
         print("\nCautions:")
@@ -562,4 +562,4 @@ def plot_model_comparison_interpretation(
     
     print("\nNext Steps:")
     for step in comparison_results['recommendations']['next_steps']:
-        print(f"  → {step}")
+        print(f"  -> {step}")

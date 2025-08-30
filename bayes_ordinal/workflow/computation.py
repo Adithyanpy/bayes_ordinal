@@ -201,8 +201,8 @@ def stack_individual_chains(idatas: List[az.InferenceData]) -> az.InferenceData:
     # Check if we're dealing with actual separate InferenceData objects or extracted chains
     # If the first idata has a 'chain' dimension, we're extracting from a single InferenceData
     if hasattr(idatas[0], 'posterior') and 'chain' in idatas[0].posterior.dims:
-        print("  ℹ  Detected single InferenceData with multiple chains")
-        print("  ℹ  No stacking needed - returning original InferenceData")
+        print("  INFO: Detected single InferenceData with multiple chains")
+        print("  INFO: No stacking needed - returning original InferenceData")
         return idatas[0]
     
     # Validate all idatas have the same variables
@@ -224,8 +224,8 @@ def stack_individual_chains(idatas: List[az.InferenceData]) -> az.InferenceData:
         
     except Exception as e:
         print(f"    Primary concatenation failed: {e}")
-        print("  ℹ  This function is designed for separate InferenceData files")
-        print("  ℹ  For single InferenceData with multiple chains, use the original object")
+        print("  INFO: This function is designed for separate InferenceData files")
+        print("  INFO: For single InferenceData with multiple chains, use the original object")
         print(" Chain stacking completed successfully!")
         return idatas[0]  # Return the first one as fallback
 

@@ -88,28 +88,28 @@ def print_model_summary(model: pm.Model) -> None:
     print(f"\n FREE VARIABLES (Parameters):")
     if info['free_variables']:
         for name, details in info['free_variables'].items():
-            print(f"  • {name}: {details['type']}, shape: {details['shape']}")
+            print(f"  - {name}: {details['type']}, shape: {details['shape']}")
     else:
         print("  None")
     
     print(f"\n OBSERVED VARIABLES:")
     if info['observed_variables']:
         for name, details in info['observed_variables'].items():
-            print(f"  • {name}: {details['type']}, shape: {details['shape']}")
+            print(f"  - {name}: {details['type']}, shape: {details['shape']}")
     else:
         print("  None")
     
     print(f"\n DETERMINISTIC VARIABLES:")
     if info['deterministic_variables']:
         for name, details in info['deterministic_variables'].items():
-            print(f"  • {name}: {details['type']}, shape: {details['shape']}")
+            print(f"  - {name}: {details['type']}, shape: {details['shape']}")
     else:
         print("  None")
     
     print(f"\n DATA VARIABLES (pm.Data containers):")
     if info['data_variables']:
         for name, details in info['data_variables'].items():
-            print(f"  • {name}: {details['type']}, shape: {details['shape']}")
+            print(f"  - {name}: {details['type']}, shape: {details['shape']}")
     else:
         print("  None (model doesn't use pm.Data containers)")
     

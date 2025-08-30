@@ -7,7 +7,7 @@ import pymc as pm
 from arviz.stats import hdi
 from typing import Callable, Sequence
 
-# ← Import your fit_ordinal_model helper
+# Import your fit_ordinal_model helper
 from .fitting import fit_ordinal_model
 
 def prior_sensitivity(
@@ -55,7 +55,8 @@ def prior_sensitivity(
 
     Returns
     -------
-    None (displays plot)
+    None
+        Displays a plot showing sensitivity analysis results
 
     Examples
     --------
@@ -84,7 +85,7 @@ def prior_sensitivity(
         lowers.append(low)
         uppers.append(high)
 
-    # Plot mean ± HDI
+    # Plot mean +/- HDI
     plt.figure(figsize=(6, 4))
     yerr = [
         np.array(means) - np.array(lowers),
@@ -99,7 +100,7 @@ def prior_sensitivity(
         lw=2,
     )
     plt.xlabel(f"Prior `{hyper_name}`")
-    plt.ylabel(f"Posterior mean ± {int(hdi_prob*100)}% HDI of `{trace_var}`")
+    plt.ylabel(f"Posterior mean +/- {int(hdi_prob*100)}% HDI of `{trace_var}`")
     plt.title(f"Sensitivity of `{trace_var}` to prior `{hyper_name}`")
     plt.tight_layout()
     plt.show()

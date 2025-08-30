@@ -139,7 +139,7 @@ def cumulative_model(y, X, K, link="logit", priors=None, model_name="cumulative_
     # Note: Disable this when using data-informed priors (e.g., z-scores) that are already
     # properly scaled for the probit link function
     if link.lower() == "probit" and auto_probit_adjustment:
-        probit_adjustment = 1.0 / 1.6  # ≈ 0.625
+        probit_adjustment = 1.0 / 1.6  # ~ 0.625
         
         # Adjust coefficient priors
         if "beta" in priors and len(priors["beta"]) == 2:
