@@ -17,6 +17,8 @@ This package provides a complete Bayesian workflow for ordinal regression analys
 
 This package is built upon and extends the excellent PyMC examples and documentation, as well as foundational research in Bayesian workflow:
 
+- **[Statistical Rethinking: A Bayesian Course with Examples in R and Stan (McElreath, 2020)](https://xcelab.net/rm/statistical-rethinking/)** - The definitive guide to Bayesian data analysis and workflow, providing the philosophical foundation, practical methodology, and diagnostic approaches that inform our package's design. Many of our workflow components, diagnostic tools, and model comparison methods are inspired by the principles and examples in this book.
+
 - **[PyMC Ordered Categories Example](https://www.pymc.io/projects/examples/en/latest/statistical_rethinking_lectures/11-Ordered_Categories.html)** - Statistical Rethinking lecture series on ordered categorical data, providing the foundational understanding of cumulative ordinal regression models and their implementation in PyMC.
 
 - **[PyMC GLM Ordinal Regression Example](https://www.pymc.io/projects/examples/en/latest/generalized_linear_models/GLM-ordinal-regression.html)** - Comprehensive guide to generalized linear models for ordinal regression, offering insights into model specification, prior choices, and diagnostic approaches.
