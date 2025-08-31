@@ -34,7 +34,7 @@ from .utils.data_processing import (
     create_group_indices, compute_category_proportions
 )
 from .utils.model_validation import (
-    check_convergence, validate_ordinal_model
+    validate_ordinal_model
 )
 
 
@@ -81,7 +81,6 @@ __all__ = [
     "standardize_features",
     "create_group_indices",
     "compute_category_proportions",
-    "check_convergence",
     "validate_ordinal_model",
 
 

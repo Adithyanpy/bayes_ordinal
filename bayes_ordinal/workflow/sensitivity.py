@@ -39,7 +39,7 @@ def prior_sensitivity(
     K : int
         Number of outcome categories.
     hyper_name : str
-        Name of the hyperparameter to sweep (e.g., "coef_sigma").
+        Name of the hyperparameter to sweep (e.g., "sigma").
     hyper_values : list of float
         Values to try for the hyperparameter.
     trace_var : str

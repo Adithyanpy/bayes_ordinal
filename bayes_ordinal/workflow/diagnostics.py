@@ -209,7 +209,7 @@ def run_comprehensive_diagnostics(
             if 'r_hat' in summary_df.columns:
                 print(f"  R-hat values: {summary_df['r_hat'].values}")
             if results["recommendations"]:
-                print(f"  Recommendations: {', '.join(results['recommendations'])}")
+                print(f" Recommendations: {', '.join(results['recommendations'])}")
                 
         except Exception as e:
             print(f" Diagnostic summary failed: {e}")
@@ -236,7 +236,7 @@ def plot_diagnostics(
     Plot comprehensive diagnostic plots for Bayesian model assessment.
     
     This function creates diagnostic plots including energy plots, trace plots,
-    rank plots, and autocorrelation plots following PyMC best practices.
+    rank plots, and autocorrelation plots.
     
     Parameters
     ----------
@@ -256,15 +256,15 @@ def plot_diagnostics(
     
     if var_names is None:
         # Use main parameters if no specific variables provided
-        # Look for common parameter patterns in the model (prioritizing PyMCOrdinal convention)
+        # Look for common parameter patterns in the model
         available_vars = list(idata.posterior.data_vars.keys())
         var_names = []
         
-        # Add beta parameters (coefficients) - PyMCOrdinal docs use "beta"
+        # Add beta parameters (coefficients)
         beta_vars = [v for v in available_vars if "beta" in v.lower()]
         var_names.extend(beta_vars)
         
-        # Add cutpoints parameters - PyMCOrdinal docs use "cutpoints" (not "alpha")
+        # Add cutpoints parameters
         cutpoint_vars = [v for v in available_vars if "cutpoints" in v.lower()]
         var_names.extend(cutpoint_vars)
         
@@ -274,7 +274,7 @@ def plot_diagnostics(
     
     print("Creating diagnostic plots...")
     
-    # 1. Energy plot (most important for convergence)
+    # 1. Energy plot
     if include_energy and hasattr(idata, "sample_stats") and hasattr(idata.sample_stats, "energy"):
         try:
             print(" Creating energy plot...")
@@ -355,7 +355,7 @@ def create_model_summary(
     model_name: str = "model"
 ) -> dict:
     """
-    Create a comprehensive model summary following PyMC best practices.
+    Create a comprehensive model summary.
     
     This function provides a complete model assessment including sampling
     information, diagnostics, parameter summaries, and recommendations.

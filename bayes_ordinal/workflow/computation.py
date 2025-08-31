@@ -1,8 +1,7 @@
 """
 Computational issue resolution for Bayesian ordinal regression.
 
-This module implements strategies for addressing computational issues
-as outlined in the Bayesian workflow paper (section 5).
+This module implements strategies for addressing computational issues.
 """
 
 import numpy as np
@@ -56,12 +55,12 @@ def diagnose_computational_issues(idata: az.InferenceData) -> Dict[str, Any]:
             'variables': list(ess_issues.index) if len(ess_issues) > 0 else []
         }
         
-        print(f"   R-hat: {issues['rhat']['n_bad']} parameters with issues")
-        print(f"   ESS: {issues['ess']['n_bad']} parameters with low ESS")
+        print(f" R-hat: {issues['rhat']['n_bad']} parameters with issues")
+        print(f" ESS: {issues['ess']['n_bad']} parameters with low ESS")
         
     except Exception as e:
         issues['convergence']['error'] = str(e)
-        print(f"   Convergence check failed: {e}")
+        print(f" Convergence check failed: {e}")
     
     # Check divergences
     try:
@@ -70,10 +69,10 @@ def diagnose_computational_issues(idata: az.InferenceData) -> Dict[str, Any]:
             'count': n_divergences,
             'percentage': n_divergences / idata.sample_stats['diverging'].size * 100
         }
-        print(f"   Divergences: {n_divergences} ({issues['divergences']['percentage']:.2f}%)")
+        print(f" Divergences: {n_divergences} ({issues['divergences']['percentage']:.2f}%)")
     except Exception as e:
         issues['divergences']['error'] = str(e)
-        print(f"   Divergence check failed: {e}")
+        print(f" Divergence check failed: {e}")
     
     # Check energy statistics
     try:
@@ -83,10 +82,10 @@ def diagnose_computational_issues(idata: az.InferenceData) -> Dict[str, Any]:
             'energy_plot': energy_plot,
             'has_issues': False  # Energy plot created successfully
         }
-        print("   Energy plot: Created successfully")
+        print(" Energy plot: Created successfully")
     except Exception as e:
         issues['energy']['error'] = str(e)
-        print(f"   Energy plot failed: {e}")
+        print(f" Energy plot failed: {e}")
     
     # Generate recommendations
     if issues['divergences']['count'] > 0:
@@ -100,7 +99,7 @@ def diagnose_computational_issues(idata: az.InferenceData) -> Dict[str, Any]:
     
     # Display recommendations
     if issues['recommendations']:
-        print("\n  Recommendations:")
+        print("\n Recommendations:")
         for rec in issues['recommendations']:
             print(f"   - {rec}")
     else:
@@ -162,7 +161,7 @@ def check_multimodality(idata: az.InferenceData, var_names: Optional[List[str]] 
             
         except Exception as e:
             multimodality_results[var_name] = {'error': str(e)}
-            print(f"  {var_name}:  Error - {e}")
+            print(f" {var_name}:  Error - {e}")
     
     # Summary
     if multimodal_count > 0:
@@ -193,16 +192,16 @@ def stack_individual_chains(idatas: List[az.InferenceData]) -> az.InferenceData:
         raise ValueError("idatas list cannot be empty")
     
     if len(idatas) == 1:
-        print("   Single idata - no stacking needed")
+        print(" Single idata - no stacking needed")
         return idatas[0]
     
-    print(f"   Stacking {len(idatas)} inference data objects")
+    print(f" Stacking {len(idatas)} inference data objects")
     
     # Check if we're dealing with actual separate InferenceData objects or extracted chains
     # If the first idata has a 'chain' dimension, we're extracting from a single InferenceData
     if hasattr(idatas[0], 'posterior') and 'chain' in idatas[0].posterior.dims:
-        print("  INFO: Detected single InferenceData with multiple chains")
-        print("  INFO: No stacking needed - returning original InferenceData")
+        print(" INFO: Detected single InferenceData with multiple chains")
+        print(" INFO: No stacking needed - returning original InferenceData")
         return idatas[0]
     
     # Validate all idatas have the same variables
@@ -212,20 +211,18 @@ def stack_individual_chains(idatas: List[az.InferenceData]) -> az.InferenceData:
         if current_vars != first_vars:
             raise ValueError(f"idata {i} has different variables: {current_vars - first_vars}")
     
-    print(f"   Validated {len(first_vars)} variables across all idatas")
+    print(f" Validated {len(first_vars)} variables across all idatas")
     
-    # Use ArviZ's built-in concatenation for InferenceData objects
     try:
-        # This is the proper way to concatenate InferenceData objects
         stacked_idata = az.concat(idatas, dim='chain')
-        print("   Successfully stacked using az.concat")
+        print(" Successfully stacked using az.concat")
         print(" Chain stacking completed successfully!")
         return stacked_idata
         
     except Exception as e:
-        print(f"    Primary concatenation failed: {e}")
-        print("  INFO: This function is designed for separate InferenceData files")
-        print("  INFO: For single InferenceData with multiple chains, use the original object")
+        print(f" Primary concatenation failed: {e}")
+        print(" INFO: This function is designed for separate InferenceData files")
+        print(" INFO: For single InferenceData with multiple chains, use the original object")
         print(" Chain stacking completed successfully!")
         return idatas[0]  # Return the first one as fallback
 
@@ -261,14 +258,14 @@ def fake_data_simulation(model: pm.Model, n_simulations: int = 10) -> Dict[str, 
                     'data_shape': next(iter(fake_data.values())).shape if fake_data else None
                 })
                 successful += 1
-                print(f"   Simulation {i+1}: Success")
+                print(f" Simulation {i+1}: Success")
         except Exception as e:
             simulation_results.append({
                 'simulation': i,
                 'success': False,
                 'error': str(e)
             })
-            print(f"   Simulation {i+1}: Failed - {e}")
+            print(f" Simulation {i+1}: Failed - {e}")
     
     success_rate = (successful / n_simulations) * 100
     
@@ -279,11 +276,11 @@ def fake_data_simulation(model: pm.Model, n_simulations: int = 10) -> Dict[str, 
     print(f"  Success Rate: {success_rate:.1f}%")
     
     if success_rate == 100:
-        print(" All simulations successful! Model implementation looks good.")
+        print(" All simulations successful. Model implementation looks good.")
     elif success_rate > 0:
         print(f"  {n_simulations - successful} simulations failed. Check model specification.")
     else:
-        print(" All simulations failed! Serious model implementation issues.")
+        print("All simulations failed! Serious model implementation issues.")
     
     return {
         'n_simulations': n_simulations,
@@ -331,33 +328,33 @@ def comprehensive_computation_check(model: pm.Model, idata: az.InferenceData,
     # Generate recommendations based on diagnostics
     if results['diagnosis']['divergences']['count'] > 0:
         results['recommendations'].append("Reparameterize model to reduce divergences")
-        print("    High divergences detected")
+        print("High divergences detected")
     
     if results['diagnosis']['rhat']['n_bad'] > 0:
         results['recommendations'].append("Run longer chains or check model specification")
-        print("    Poor convergence detected")
+        print("Poor convergence detected")
     
     if results['diagnosis']['ess']['n_bad'] > 0:
         results['recommendations'].append("Increase number of draws")
-        print("    Low ESS detected")
+        print("Low ESS detected")
     
     if any(results['multimodality'][var]['is_multimodal'] for var in results['multimodality']):
         results['recommendations'].append("Check for multimodality - consider different initialization")
-        print("    Multimodality detected")
+        print("Multimodality detected")
     
     if results['fake_data']['n_successful'] < results['fake_data']['n_simulations']:
         results['recommendations'].append("Model implementation issues detected")
-        print("    Model implementation issues detected")
+        print("Model implementation issues detected")
     
     if not results['recommendations']:
-        print("   No major issues detected")
+        print("No major issues detected")
     
     print(f"\n Final Summary:")
     print(f"  Total recommendations: {len(results['recommendations'])}")
     if results['recommendations']:
-        print("  Recommendations:")
+        print("Recommendations:")
         for i, rec in enumerate(results['recommendations'], 1):
             print(f"    {i}. {rec}")
     
-    print(" Comprehensive computation check completed!")
+    print("Comprehensive computation check completed!")
     return results 

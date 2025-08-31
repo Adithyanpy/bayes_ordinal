@@ -54,7 +54,6 @@ def run_posterior_predictive(
         combined.extend(ppc)
         plot_kind = "hist" if kind == "hist" else "cumulative"
         if kind == "hist":
-            # for discrete variables, kind="kde" will produce a histogram
             az.plot_ppc(
                 combined,
                 var_names=[var_name],

@@ -1,8 +1,8 @@
 """
 Analysis functions for Bayesian ordinal models.
 
-This module contains functions for analyzing fitted models, including
-counterfactual analysis, diagnostics, and model comparison.
+This module contains functions for analyzing fitted models for
+counterfactual analysis.
 """
 
 from .counterfactual import (

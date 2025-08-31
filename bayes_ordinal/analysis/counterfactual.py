@@ -2,7 +2,7 @@
 Counterfactual analysis for Bayesian ordinal models.
 
 This module provides functions for running counterfactual analysis on fitted
-ordinal regression models, following PyMCOrdinal documentation patterns.
+ordinal regression models.
 """
 
 import numpy as np
@@ -19,17 +19,14 @@ def run_counterfactual_analysis(
     feature_names: list,
     n_samples: int = 1000
 ) -> Dict[str, Any]:
-    """
-    Run counterfactual analysis following PyMCOrdinal documentation exactly.
-    
-    This function implements the counterfactual analysis pattern shown
-    in the PyMCOrdinal documentation, using pm.set_data() with
+    """    
+    This function implements the counterfactual analysis using pm.set_data() with
     xr.DataArray and pm.sample_posterior_predictive() to generate predictions.
     
     Parameters
     ----------
     model : pm.Model
-        The fitted ordinal model (cumulative)
+        The fitted ordinal model
     idata : az.InferenceData
         Posterior samples from the model
     scenarios : Dict[str, Dict[str, int]]
@@ -98,14 +95,13 @@ def run_counterfactual_analysis(
         for scenario_name, scenario_values in scenarios.items():
             print(f"Running counterfactual for scenario: {scenario_name}")
             
-            # Set data for this scenario (single observation following PyMCOrdinal docs)
             scenario_data = {}
             for name in feature_names:
                 var_name = name.lower().replace(" ", "_")
                 value = scenario_values.get(name, 0)  # Default to 0 if not specified
                 scenario_data[var_name] = np.array([value], dtype=float)
             
-            # Update model data using pm.set_data (PyMCOrdinal documentation pattern)
+            # Update model data using pm.set_data
             pm.set_data(scenario_data, model=model)
             
             # Sample posterior predictive for this scenario
@@ -170,7 +166,7 @@ def _run_counterfactual_without_data_containers(
         "summary": {}
     }
     
-    # Auto-detect beta and cutpoint variables (following package convention)
+    # Auto-detect beta and cutpoint variables
     available_vars = list(idata.posterior.data_vars.keys())
     print(f" Available variables in posterior: {available_vars}")
     
@@ -298,10 +294,9 @@ def plot_counterfactual_results(
     figsize: Tuple[float, float] = (12, 8)
 ) -> None:
     """
-    Plot counterfactual analysis results following PyMCOrdinal documentation exactly.
+    Plot counterfactual analysis results.
     
-    This function creates histograms using plt.bar() exactly like the
-    PyMCOrdinal documentation.
+    This function creates histograms using plt.bar().
     
     Parameters
     ----------
@@ -321,10 +316,8 @@ def plot_counterfactual_results(
     
     # Handle different result formats
     if "predictions" in results:
-        # New format from updated function
         scenarios_data = results.get("predictions", {})
     else:
-        # Legacy format - results is directly the scenarios dict
         scenarios_data = results
     
     if not scenarios_data:

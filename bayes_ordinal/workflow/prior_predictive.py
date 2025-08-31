@@ -134,8 +134,8 @@ def run_prior_predictive(
             plot_kwargs = plot_kwargs or {}
             _plot_prior_predictive(idata, y_obs, draws, custom_plots, **plot_kwargs)
         except Exception as e:
-            print(f"  Plotting failed: {e}")
-            print("  Prior predictive samples were generated successfully")
+            print(f" Plotting failed: {e}")
+            print(" Prior predictive samples were generated successfully")
     
     print(f" Prior predictive check completed successfully!")
     print(f" Results stored in InferenceData object")
@@ -200,13 +200,10 @@ def _get_response_variable_name(idata: az.InferenceData) -> str:
         Name of the response variable
     """
     available_vars = list(idata.prior_predictive.data_vars.keys())
-    
-    # For PyMC models, the response variable should be named 'y' or 'model_name::y'
-    # This follows standard PyMC convention
     if 'y' in available_vars:
         return 'y'
     
-    # Check for variables ending with '::y' (PyMC naming convention)
+    # Check for variables ending with '::y'
     y_vars = [v for v in available_vars if v.endswith('::y')]
     if y_vars:
         return y_vars[0]
@@ -379,7 +376,6 @@ def _plot_sample_distributions(y_data, K, draws):
             
             # Only plot if we have valid data
             if len(sample_data) > 0 and not np.all(sample_data == 0):
-                # Use more visible plotting style
                 plt.hist(sample_data, bins=range(K+1), alpha=0.3, edgecolor='blue', 
                         color='lightblue', histtype='stepfilled', linewidth=1)
         except Exception as e:
@@ -428,11 +424,11 @@ def _plot_mean_distribution(y_data, K):
                    color='skyblue', linewidth=2, label="Mean Frequency Distribution")
         else:
             plt.text(0.5, 0.5, 'No valid mean data', ha='center', va='center', transform=plt.gca().transAxes)
-            print("  Warning: Mean distribution has no valid data")
+            print(" Warning: Mean distribution has no valid data")
             
     except Exception as e:
         plt.text(0.5, 0.5, f'Error: {e}', ha='center', va='center', transform=plt.gca().transAxes)
-        print(f"  Warning: Could not compute mean distribution: {e}")
+        print(f" Warning: Could not compute mean distribution: {e}")
     
     plt.xlabel("Ordinal Category")
     plt.ylabel("Mean Frequency")

@@ -1,5 +1,3 @@
-# bayes_ordinal/workflow/cross_validation_refactored.py
-# Refactored version eliminating redundancy
 
 import arviz as az
 import matplotlib.pyplot as plt
@@ -9,7 +7,7 @@ from typing import Sequence, Mapping, Dict, Any, Tuple
 import numpy as np
 
 # ============================================================================
-# HELPER FUNCTIONS (Extracted common functionality)
+# HELPER FUNCTIONS
 # ============================================================================
 
 def _check_log_likelihood(idata: az.InferenceData, name: str) -> bool:
@@ -263,7 +261,7 @@ def compare_models_interpretation(
     ic: str = "loo",
     reffuge_thresh: float = 0.7
 ) -> Dict[str, Any]:
-    """Advanced model comparison with McElreath-style interpretation."""
+    """Advanced model comparison."""
     # Get basic comparison
     comparison_df = compare_models(models, idatas, ic, reffuge_thresh)
     
@@ -276,7 +274,6 @@ def compare_models_interpretation(
     # Find best model
     best_model = _determine_best_model(comparison_df, ic)
     
-    # McElreath interpretation rules
     interpretation = {}
     for name, diff in zip(comparison_df.index, differences):
         if diff == 0:
@@ -323,7 +320,7 @@ def compare_models_interpretation(
         'interpretation': interpretation,
         'influence_diagnostics': influence_diagnostics,
         'complexity': complexity,
-        'recommendations': _generate_mcelreath_recommendations(
+        'recommendations': _generate_mc_recommendations(
             interpretation, influence_diagnostics, complexity, best_model
         )
     }
@@ -393,13 +390,13 @@ def display_comparison_results(results: Dict[str, Any]) -> None:
     
     print("\n" + "="*80)
 
-def _generate_mcelreath_recommendations(
+def _generate_mc_recommendations(
     interpretation: Dict[str, Any],
     influence_diagnostics: Dict[str, Any],
     complexity: Dict[str, Any],
     best_model: str
 ) -> Dict[str, Any]:
-    """Generate McElreath-style recommendations based on model comparison results."""
+    """Generate recommendations based on model comparison results."""
     recommendations = {
         'primary_model': best_model,
         'model_selection': [],
@@ -447,7 +444,7 @@ def plot_model_comparison_interpretation(
     comparison_results: Dict[str, Any],
     figsize: Tuple[float, float] = (15, 10)
 ) -> None:
-    """Plot comprehensive McElreath-style model comparison."""
+    """Plot comprehensive model comparison."""
     fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=figsize)
     
     # Extract data
@@ -459,7 +456,6 @@ def plot_model_comparison_interpretation(
     
     # Plot 1: IC values with uncertainty
     y_pos = np.arange(len(model_names))
-    # Use the best_model from results instead of computing it here
     best_model_name = comparison_results['best_model']
     best_idx = list(model_names).index(best_model_name)
     
@@ -482,7 +478,6 @@ def plot_model_comparison_interpretation(
     ax2.set_title('Relative Performance')
     ax2.grid(True, alpha=0.3)
     
-    # Add McElreath interpretation lines
     ax2.axvline(-2, color='orange', linestyle='--', alpha=0.7, label='+/-2 (equivalent)')
     ax2.axvline(2, color='orange', linestyle='--', alpha=0.7)
     ax2.axvline(-6, color='red', linestyle='--', alpha=0.7, label='+/-6 (substantial)')

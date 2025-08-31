@@ -13,6 +13,20 @@ This package provides a complete Bayesian workflow for ordinal regression analys
 - **Hierarchical Support**: Group-level varying intercepts and random effects
 - **Counterfactual Analysis**: Scenario-based predictions and causal inference
 
+## Foundation & Acknowledgments
+
+This package is built upon and extends the excellent PyMC examples and documentation, as well as foundational research in Bayesian workflow:
+
+- **[PyMC Ordered Categories Example](https://www.pymc.io/projects/examples/en/latest/statistical_rethinking_lectures/11-Ordered_Categories.html)** - Statistical Rethinking lecture series on ordered categorical data, providing the foundational understanding of cumulative ordinal regression models and their implementation in PyMC.
+
+- **[PyMC GLM Ordinal Regression Example](https://www.pymc.io/projects/examples/en/latest/generalized_linear_models/GLM-ordinal-regression.html)** - Comprehensive guide to generalized linear models for ordinal regression, offering insights into model specification, prior choices, and diagnostic approaches.
+
+- **[PyMC Markov Chain Monte Carlo Example](https://www.pymc.io/projects/examples/en/latest/statistical_rethinking_lectures/08-Markov_Chain_Monte_Carlo.html)** - Statistical Rethinking lecture on MCMC diagnostics and computational issue resolution, providing the foundation for our comprehensive diagnostic tools, convergence assessment, and computational problem-solving approaches.
+
+- **[Bayesian Workflow (Gelman et al., 2020)](https://arxiv.org/pdf/2011.01808)** - Foundational paper that establishes the principles and practices of modern Bayesian workflow, including prior predictive checking, posterior predictive checking, cross-validation, model comparison, and computational problem resolution. Our package implements many of these workflow components as integrated, production-ready tools.
+
+Our implementation builds upon these examples and research by providing a unified, production-ready interface that combines the best practices from all sources while adding comprehensive workflow tools, diagnostics, and analysis capabilities.
+
 
 ## Installation
 
@@ -71,7 +85,7 @@ The cumulative model implements proportional odds ordinal regression with flexib
 model = bo.cumulative_model(
     y=y, X=X, K=4,
     link="logit",  # "logit", "probit"
-    priors={"coef_mu": 0.0, "coef_sigma": 2.5},
+    priors={"beta": [0, 1], "sigma": 1.0},
     prior_type="exponential_sigma",  # "fixed_sigma" or "exponential_sigma"
     feature_names=["Age", "Income", "Education"]
 )
@@ -184,7 +198,7 @@ computation_check = bo.comprehensive_computation_check(idata)
 sensitivity = bo.prior_sensitivity(
     bo.cumulative_model,
     y=y, X=X, K=4,
-    hyper_name="coef_sigma",
+    hyper_name="sigma",
     hyper_values=[1.0, 2.5, 5.0],
     trace_var="beta"
 )
@@ -224,7 +238,7 @@ variables = bo.inspect_model_variables(model)
 bo.print_model_summary(model)
 
 # Validate ordinal model structure
-is_valid = bo.validate_ordinal_model(model)
+is_valid = bo.validate_ordinal_model(y, X, K)
 ```
 
 ## Counterfactual Analysis
@@ -299,9 +313,6 @@ bo.plot_model_comparison_interpretation(interpretation)
 
 # 6. Check convergence
 for name, idata in idatas.items():
-    convergence = bo.check_convergence(idata)
-    print(f"{name}: Converged = {convergence['converged']}")
-    
     diag_df = bo.summarize_diagnostics(idata)
     print(f"{name} R-hat max: {diag_df['r_hat'].max():.4f}")
     print(f"{name} ESS min: {diag_df['ess_bulk'].min():.0f}")

@@ -19,7 +19,6 @@ from .data_processing import (
 )
 
 from .model_validation import (
-    check_convergence,
     validate_ordinal_model
 )
 
@@ -36,6 +35,5 @@ __all__ = [
     "compute_category_proportions",
     
     # Model validation
-    "check_convergence",
     "validate_ordinal_model"
 ]

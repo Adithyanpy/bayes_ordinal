@@ -17,13 +17,6 @@ def cumulative_model(y, X, K, link="logit", priors=None, model_name="cumulative_
     """
     Build a cumulative ordinal regression model.
     
-    This implements two approaches for cutpoints:
-    1. Constrained approach: Using Dirichlet for cutpoints (better for constrained outcome space)
-       - Uses Dirichlet distribution to ensure proportions sum to 1
-       - Applies cumulative sum to create ordered cutpoints
-       - First cutpoint is fixed at 0, remaining are cumulative sums of Dirichlet draws
-    2. Flexible approach: Using Normal with univariate_ordered transform
-    
     Parameters:
     -----------
     y : array-like
@@ -38,7 +31,7 @@ def cumulative_model(y, X, K, link="logit", priors=None, model_name="cumulative_
         Prior specifications (if None, uses sensible defaults). Key parameters:
         - "beta": [mu, sigma] for coefficients (default: [0, 1])
         - "sigma": sigma for cutpoints (default: 1.0)
-        - "mu": means for cutpoints (default: zeros or linspace)
+        - "mu": means for cutpoints (default: zeros for fixed_sigma, linspace for exponential_sigma)
         - "tau": scale parameter for HalfNormal prior on group-level variation (default: 1.0)
         - "constrained_uniform": whether to use constrained Dirichlet approach (default: False)
     model_name : str, optional
@@ -50,8 +43,8 @@ def cumulative_model(y, X, K, link="logit", priors=None, model_name="cumulative_
     n_groups : int, optional
         Number of groups for hierarchical modeling
     prior_type : str, optional
-        "fixed_sigma": Fixed sigma for cutpoints (like OC documentation)
-        "exponential_sigma": Random sigma from Exponential prior (current approach)
+        "fixed_sigma": Fixed sigma for cutpoints
+        "exponential_sigma": Random sigma from Exponential prior
     auto_probit_adjustment : bool, optional
         Whether to automatically adjust prior scales for probit models (default: True).
         Set to False when using data-informed priors like z-scores that are already
@@ -73,16 +66,13 @@ def cumulative_model(y, X, K, link="logit", priors=None, model_name="cumulative_
     The model features:
     - Generic beta coefficients with size parameter
     - Support for both constrained (Dirichlet) and flexible (Normal) cutpoint approaches
-      * Constrained: Uses Dirichlet distribution with cumulative sum transformation
-      * Flexible: Uses Normal distribution with ordered transform
     - Hierarchical structure when group_idx and n_groups are provided
-      * Group-level variation uses HalfNormal prior: u_sigma ~ HalfNormal(tau)
-      * This provides adaptive shrinkage and better uncertainty quantification
     - Automatic 0-based indexing for ordinal categories
     - Two prior approaches: fixed_sigma (fixed sigma) and exponential_sigma (random sigma)
     - Automatic probit adjustment: Prior scales are automatically adjusted for probit models
       (coefficients, cutpoints, and group-level variation are scaled by ~0.625).
       This can be disabled with auto_probit_adjustment=False when using properly scaled priors.
+    - Additional model attributes: feature_names, link (accessible after model creation)
     """
     # Validate inputs
     if K < 2:
@@ -175,10 +165,10 @@ def cumulative_model(y, X, K, link="logit", priors=None, model_name="cumulative_
                          sigma=priors.get("beta", [0, 1])[1], 
                          dims=("feature",))
         
-        # Create pm.Data variable for the entire feature matrix (like OC does)
+        # Create pm.Data variable for the entire feature matrix
         X_data = pm.Data("X", X, dims=("obs", "feature"))
         
-        # Linear predictor using pm.Data variable (like OC)
+        # Linear predictor using pm.Data variable
         eta_base = pm.math.dot(X_data, beta)
         
         # Add hierarchical structure if specified
@@ -207,7 +197,7 @@ def cumulative_model(y, X, K, link="logit", priors=None, model_name="cumulative_
             )
         else:
             if prior_type == "fixed_sigma":
-                # Approach 2a: Fixed sigma (like OC)
+                # Approach 2a: Fixed sigma
                 cutpoints = pm.Normal(
                     "cutpoints",
                     mu=priors.get("mu", np.zeros(K-1)),
@@ -216,7 +206,7 @@ def cumulative_model(y, X, K, link="logit", priors=None, model_name="cumulative_
                     dims=("cut",)
                 )
             else:
-                # Approach 2b: Exponential sigma (current approach)
+                # Approach 2b: Exponential sigma
                 sigma = pm.Exponential("sigma", priors.get("sigma", 1.0))
                 cutpoints = pm.Normal(
                     "cutpoints",
