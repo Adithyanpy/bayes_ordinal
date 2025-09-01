@@ -315,19 +315,27 @@ def plot_diagnostics(
 def plot_group_forest(
     idata: az.InferenceData,
     var_name: str,
+    model=None,
     hdi_prob: float = 0.94,
     figsize: tuple[float, float] | None = None,
     combined: bool = True
 ):
     """
-    Plot a forest (caterpillar) plot for group-level effects.
+    Plot a forest (caterpillar) plot for variables.
+
+    This function automatically detects the variable type and creates appropriate labels:
+    - For coefficient variables (like "beta"), uses feature names from the model if available
+    - For group-level variables (like "u"), uses default ArviZ labels
+    - For other variables, uses default ArviZ labels
 
     Parameters
     ----------
     idata : az.InferenceData
         Inference data from PyMC model.
     var_name : str
-        Name of the group-level variable (e.g., "u").
+        Name of the variable to plot (e.g., "beta", "u", "cutpoints").
+    model : pm.Model, optional
+        PyMC model object to extract feature names for coefficient variables.
     hdi_prob : float, default=0.94
         Width of the HDI for display.
     figsize : tuple, optional
@@ -337,9 +345,17 @@ def plot_group_forest(
 
     Examples
     --------
+    >>> # For group-level effects
     >>> plot_group_forest(idata, var_name="u", hdi_prob=0.9)
+    
+    >>> # For coefficients with feature names
+    >>> plot_group_forest(idata, var_name="beta", model=model, hdi_prob=0.9)
+    
+    >>> # For other variables
+    >>> plot_group_forest(idata, var_name="cutpoints", hdi_prob=0.9)
     """
-    az.plot_forest(
+    # Create the forest plot
+    ax = az.plot_forest(
         idata,
         var_names=[var_name],
         hdi_prob=hdi_prob,
@@ -347,8 +363,44 @@ def plot_group_forest(
         figsize=figsize,
         kind="forestplot"
     )
-    plt.title(f"Group-level `{var_name}` - {int(hdi_prob*100)}% CI")
+    
+    # If it's a coefficient variable and we have feature names, update the y-axis labels
+    if "beta" in var_name and model is not None and hasattr(model, 'feature_names'):
+        feature_names = model.feature_names
+        
+        # Get the current y-tick labels
+        y_labels = ax[0].get_yticklabels()
+        
+        # Create new labels with feature names
+        new_labels = []
+        for label in y_labels:
+            # Extract the index from labels like "var_name[0]", "var_name[1]", etc.
+            if '[' in label.get_text() and ']' in label.get_text():
+                try:
+                    index = int(label.get_text().split('[')[1].split(']')[0])
+                    if 0 <= index < len(feature_names):
+                        new_labels.append(feature_names[index])
+                    else:
+                        new_labels.append(label.get_text())
+                except (ValueError, IndexError):
+                    new_labels.append(label.get_text())
+            else:
+                new_labels.append(label.get_text())
+        
+        # Update the y-axis labels
+        ax[0].set_yticklabels(new_labels)
+        
+        # Update title to indicate feature names are used
+        plt.title(f"Coefficient `{var_name}` with Feature Names - {int(hdi_prob*100)}% CI")
+    else:
+        # Use default title
+        plt.title(f"Variable `{var_name}` - {int(hdi_prob*100)}% CI")
+    
     plt.show()
+
+
+
+
 
 def create_model_summary(
     idata: az.InferenceData, 
