@@ -318,7 +318,8 @@ def plot_group_forest(
     model=None,
     hdi_prob: float = 0.94,
     figsize: tuple[float, float] | None = None,
-    combined: bool = True
+    combined: bool = True,
+    show_intercept: bool = False
 ):
     """
     Plot a forest (caterpillar) plot for variables.
@@ -354,9 +355,28 @@ def plot_group_forest(
     >>> # For other variables
     >>> plot_group_forest(idata, var_name="cutpoints", hdi_prob=0.9)
     """
+    # Optionally exclude intercept by slicing the posterior dataset
+    data_input = idata
+    resolved_feature_names: Sequence[str] | None = None
+    sliced = False
+    var_key = None
+    if "beta" in var_name:
+        if model is not None and hasattr(model, "feature_names"):
+            resolved_feature_names = model.feature_names
+        var_key = var_name if var_name in idata.posterior else next(
+            (k for k in idata.posterior.data_vars.keys() if k.endswith(var_name)),
+            None
+        )
+        if not show_intercept and var_key is not None and "feature" in idata.posterior[var_key].dims:
+            try:
+                data_input = idata.posterior[[var_key]].isel(feature=slice(1, None))
+                sliced = True
+            except Exception:
+                sliced = False
+
     # Create the forest plot
     ax = az.plot_forest(
-        idata,
+        data_input,
         var_names=[var_name],
         hdi_prob=hdi_prob,
         combined=combined,
@@ -365,8 +385,8 @@ def plot_group_forest(
     )
     
     # If it's a coefficient variable and we have feature names, update the y-axis labels
-    if "beta" in var_name and model is not None and hasattr(model, 'feature_names'):
-        feature_names = model.feature_names
+    if "beta" in var_name and ((model is not None and hasattr(model, 'feature_names')) or resolved_feature_names is not None):
+        feature_names = resolved_feature_names if resolved_feature_names is not None else model.feature_names
         
         # Get the current y-tick labels
         y_labels = ax[0].get_yticklabels()
@@ -378,8 +398,10 @@ def plot_group_forest(
             if '[' in label.get_text() and ']' in label.get_text():
                 try:
                     index = int(label.get_text().split('[')[1].split(']')[0])
-                    if 0 <= index < len(feature_names):
-                        new_labels.append(feature_names[index])
+                    # If we sliced out intercept, indices start at 0 but represent original 1..N-1
+                    effective_index = (index + 1) if sliced else index
+                    if 0 <= effective_index < len(feature_names):
+                        new_labels.append(feature_names[effective_index])
                     else:
                         new_labels.append(label.get_text())
                 except (ValueError, IndexError):
