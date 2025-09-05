@@ -362,7 +362,7 @@ def display_comparison_results(results: Dict[str, Any]) -> None:
     if "convergence_diagnostics" in results:
         print("\n CONVERGENCE DIAGNOSTICS:")
         for model, conv in results["convergence_diagnostics"].items():
-            status = " CONVERGED" if conv.get('converged', False) else " NOT CONVERGED"
+            status = " Probably Converged" if conv.get('converged', False) else " Not Converged"
             print(f"  {model}: {status}")
             print(f"    R-hat max: {conv.get('max_rhat', 'N/A'):.3f}")
             print(f"    ESS min: {conv.get('min_ess', 'N/A'):.0f}")

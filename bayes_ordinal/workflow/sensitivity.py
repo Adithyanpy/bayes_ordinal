@@ -1,4 +1,3 @@
-# bayes_ordinal/workflow/sensitivity.py
 
 import numpy as np
 import arviz as az
